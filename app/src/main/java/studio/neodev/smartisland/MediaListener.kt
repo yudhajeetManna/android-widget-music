@@ -38,7 +38,12 @@ class MediaListener : NotificationListenerService() {
         val i = island ?: return
         i.enabled = Prefs.enabled(this)
         i.reloadTheme()
+        i.applyYOffset()
         i.update()
+    }
+
+    fun showTestIsland() {
+        island?.showPreview()
     }
 
     private fun shutdown() {

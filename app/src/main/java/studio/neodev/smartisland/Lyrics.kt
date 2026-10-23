@@ -17,7 +17,7 @@ object Lyrics {
     private val main = Handler(Looper.getMainLooper())
     private val lrcLine = Regex("""^\[(\d+):(\d+(?:\.\d+)?)](.*)$""")
     private val noise = Regex(
-        """[(\[][^)\]]*(official|video|audio|lyric|hd|4k|remaster)[^)\]]*[)\]]""",
+        """[(\[][^)\]]*(official|video|audio|lyric|hd|4k|remaster|deluxe|bonus|explicit)[^)\]]*[)\]]""",
         RegexOption.IGNORE_CASE
     )
     private val topic = Regex("""\s*-\s*topic$""", RegexOption.IGNORE_CASE)
@@ -42,7 +42,7 @@ object Lyrics {
         return try {
             c.connectTimeout = 8000
             c.readTimeout = 8000
-            c.setRequestProperty("User-Agent", "SmartIsland/0.1 (Android)")
+            c.setRequestProperty("User-Agent", "Lizmo/0.2 (Android)")
             if (c.responseCode != 200) null else c.inputStream.bufferedReader().use { it.readText() }
         } finally {
             c.disconnect()

@@ -28,6 +28,8 @@
 * 📱 **Notch / Camera Position Selector:** Cycle between `6 dp` (Flush), `12 dp` (Punch Hole), `18 dp` (Camera Cutout), and `24 dp` (Deep Notch) to align perfectly with your screen's front camera cutout.
 * 🎨 **New Themes (8 Total):** Added `Cyberpunk`, `Emerald`, and `Amber` alongside `Glass`, `Neon`, `Minimal`, `Sunset`, and `Mono`.
 * 👁️ **Island Preview Demo:** Tap *"Preview Island"* in the app to test and customize the floating island without needing music playing.
+* 🎙️ **Hands-Free Voice Control:** Tap the 🎙️ button on the island to speak commands (`"skip"`, `"next"`, `"previous"`, `"pause"`, `"play"`, `"theme"`, `"expand"`, `"collapse"`).
+* 🎚️ **User Audio Sensitivity:** Cycle between **`Low`** (strict noise filter), **`Med`** (standard conversational), and **`High`** (sensitive for quiet speech/whispers) with live microphone VU decibel metering.
 
 ---
 
