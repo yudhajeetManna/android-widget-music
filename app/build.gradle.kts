@@ -11,9 +11,43 @@ android {
         applicationId = "studio.neodev.smartisland"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
+
+    signingConfigs {
+        create("release") {
+            val keyBase64 = System.getenv("KEYSTORE_BASE64") ?: ""
+            if (keyBase64.isNotEmpty()) {
+                val keystoreFile = rootProject.file("lizmo-release-ci.jks")
+                keystoreFile.writeBytes(
+                    android.util.Base64.decode(keyBase64, android.util.Base64.DEFAULT)
+                )
+                storeFile = keystoreFile
+            } else {
+                storeFile = rootProject.file("lizmo-release.jks")
+            }
+            storePassword = System.getenv("KEYSTORE_PASS") ?: "lizmostore123"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "lizmo"
+            keyPassword = System.getenv("KEY_PASS") ?: "lizmostore123"
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
