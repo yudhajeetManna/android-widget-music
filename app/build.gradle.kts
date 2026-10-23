@@ -19,22 +19,23 @@ android {
 
     signingConfigs {
         create("release") {
-            val keyBase64 = System.getenv("KEYSTORE_BASE64") ?: ""
-            if (keyBase64.isNotBlank()) {
+            val keyBase64 = System.getenv("KEYSTORE_BASE64")
+            if (!keyBase64.isNullOrBlank()) {
                 val keystoreFile = rootProject.file("lizmo-release-ci.jks")
                 keystoreFile.writeBytes(Base64.getDecoder().decode(keyBase64.trim()))
                 storeFile = keystoreFile
             } else {
                 val repoKeystore = rootProject.file("keystore/lizmo-release.jks")
-                if (repoKeystore.exists()) {
-                    storeFile = repoKeystore
-                } else {
-                    storeFile = rootProject.file("lizmo-release.jks")
-                }
+                storeFile = if (repoKeystore.exists()) repoKeystore else rootProject.file("lizmo-release.jks")
             }
-            storePassword = System.getenv("KEYSTORE_PASS") ?: "lizmostore123"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "lizmo"
-            keyPassword = System.getenv("KEY_PASS") ?: "lizmostore123"
+
+            val envStorePass = System.getenv("KEYSTORE_PASS")
+            val envAlias = System.getenv("KEY_ALIAS")
+            val envKeyPass = System.getenv("KEY_PASS")
+
+            storePassword = if (!envStorePass.isNullOrBlank()) envStorePass else "lizmostore123"
+            keyAlias = if (!envAlias.isNullOrBlank()) envAlias else "lizmo"
+            keyPassword = if (!envKeyPass.isNullOrBlank()) envKeyPass else "lizmostore123"
         }
     }
 

@@ -16,14 +16,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.7 }
 
-      # Build signed release APK using keystore stored as GitHub secret
       - name: Build signed release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}
-        run: gradle assembleRelease --no-daemon
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk Lizmo.apk
@@ -36,10 +37,10 @@ jobs:
           tag_name: v0.3.${{ github.run_number }}
           name: "Lizmo v0.3.${{ github.run_number }} — Signed Release"
           body: |
-            ## Lizmo ${{ github.run_number }}
+            ## Lizmo v0.3.${{ github.run_number }}
 
             ### ? Signed & Safe
-            This APK is signed with the Lizmo release key.
+            This APK is signed with the official Lizmo release key.
             It is **not** a debug build — no test keys, no harmful flags.
 
             ### Install
