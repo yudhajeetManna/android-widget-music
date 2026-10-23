@@ -1,4 +1,4 @@
-package studio.neodev.smartisland
+package app.lizmo.island
 
 import android.content.ComponentName
 import android.service.notification.NotificationListenerService
@@ -38,12 +38,7 @@ class MediaListener : NotificationListenerService() {
         val i = island ?: return
         i.enabled = Prefs.enabled(this)
         i.reloadTheme()
-        i.applyYOffset()
         i.update()
-    }
-
-    fun showTestIsland() {
-        island?.showPreview()
     }
 
     private fun shutdown() {

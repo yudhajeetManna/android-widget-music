@@ -1,8 +1,7 @@
-package studio.neodev.smartisland
+package app.lizmo.island
 
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -91,8 +90,14 @@ class MediaTracker(
         val art = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        val old = track
         track = if (title.isBlank()) null
         else Track(title, artist, album, m.getLong(MediaMetadata.METADATA_KEY_DURATION), art)
+        if (old == null || track == null || old.title != title || old.artist != artist) {
+            // new song: don't carry over the previous song's position until the player reports one
+            baseMs = 0L
+            baseAt = SystemClock.elapsedRealtime()
+        }
     }
 
     private fun readState(s: PlaybackState?) {
@@ -115,25 +120,4 @@ class MediaTracker(
 
     fun next() { controller?.transportControls?.skipToNext() }
     fun prev() { controller?.transportControls?.skipToPrevious() }
-
-    fun seekTo(ms: Long) {
-        try { controller?.transportControls?.seekTo(ms) } catch (e: Exception) {}
-    }
-
-    fun openApp(ctx: Context): Boolean {
-        return try {
-            controller?.sessionActivity?.let {
-                it.send()
-                true
-            } ?: run {
-                val pkg = controller?.packageName ?: return false
-                val intent = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return false
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                true
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
 }

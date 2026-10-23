@@ -1,9 +1,12 @@
 name: build-apk
 on:
-  push: { branches: [main] }
+  push:
+    branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -11,10 +14,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 17 }
+        with:
+          distribution: temurin
+          java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: 8.7 }
+        with:
+          gradle-version: 8.7
 
       - name: Build signed release APK
         env:
@@ -27,27 +33,35 @@ jobs:
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk Lizmo.apk
 
-      - uses: actions/upload-artifact@v4
-        with: { name: lizmo-apk, path: Lizmo.apk }
-
-      - uses: softprops/action-gh-release@v2
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v0.3.${{ github.run_number }}
-          name: "Lizmo v0.3.${{ github.run_number }} — Signed Release"
+          name: lizmo-apk
+          path: Lizmo.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.4.${{ github.run_number }}
+          name: "Lizmo v0.4.${{ github.run_number }} - Signed Release"
           body: |
-            ## Lizmo v0.3.${{ github.run_number }}
+            ## ðŸï¸ Lizmo v0.4.${{ github.run_number }}
 
-            ### ? Signed & Safe
-            This APK is signed with the official Lizmo release key.
-            It is **not** a debug build — no test keys, no harmful flags.
+            ### ðŸ›¡ï¸ Signed & Safe Release
+            This APK is built and signed with the official Lizmo release key.
+            It is **not** a debug build â€” no test certificates, no Google Play Protect warnings.
 
-            ### Install
-            1. Download **Lizmo.apk** below
-            2. Allow *Install unknown apps* for your browser once
-            3. Tap to install — Play Protect will show **"App verified"** ?
+            ### ðŸŒŸ What's New in v0.4
+            - **Dynamic Island Overlay**: iOS-style pill floating above all apps with responsive expand/collapse animations.
+            - **Synced Karaoke Lyrics**: Real-time LRCLIB and NetEase karaoke lyric synchronization.
+            - **Live English Translation**: Real-time lyric translation into English with language override selector.
+            - **5 Designer Themes**: Glass, Neon, Minimal (100% OLED black), Sunset, and Mono.
+            - **Smart Voice Control**: Custom phonetic wake word (`lizmo`), track skipping, volume control, and iTunes song search.
 
-            ### Permissions used
-            - `SYSTEM_ALERT_WINDOW` — draw the Dynamic Island overlay
-            - `RECORD_AUDIO` — voice commands
-            - `BIND_NOTIFICATION_LISTENER_SERVICE` — read media playback info
+            ### ðŸ“² Installation
+            1. Download **Lizmo.apk** below.
+            2. Open the APK and tap **Install** (allow *Install from Unknown Sources* if prompted).
+            3. Launch **Lizmo** and grant Notification Access and Overlay permissions.
+            4. *(Android 13+)* If notification access is greyed out: `Settings > Apps > Lizmo > Menu (â‹®) > Allow restricted settings`.
           files: Lizmo.apk
+          generate_release_notes: true

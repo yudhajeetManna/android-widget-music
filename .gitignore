@@ -1,11 +1,30 @@
-.gradle
-build
-local.properties
-.idea
-*.iml
+# Gradle and Build Cache
+.gradle/
+build/
+app/build/
+*/build/
 
-# Ignore temporary and CI generated keys
+# Local configuration
+local.properties
+.bundle/
+
+# Android Studio and IntelliJ
+.idea/
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+
+# Output build artifacts
+app/build/outputs/
+
+# Keys and CI secrets
 lizmo-release-b64.txt
 lizmo-release-ci.jks
 *.jks
 !keystore/lizmo-release.jks
+
+# OS files
+.DS_Store
+Thumbs.db
