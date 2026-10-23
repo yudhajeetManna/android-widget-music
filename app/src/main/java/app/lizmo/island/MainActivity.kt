@@ -252,7 +252,7 @@ class MainActivity : Activity() {
         // SECTION: Always-on wake word switch
         // ============================================================
         voiceSw = Switch(this).apply {
-            this.text = "Always listen for wake word"
+            this.text = "Always listen for wake word  (ON by default)"
             setTextColor(Color.WHITE)
             isChecked = Prefs.voiceOn(this@MainActivity)
             setPadding(0, dp(12), 0, dp(8))
@@ -269,9 +269,8 @@ class MainActivity : Activity() {
         }
         col.addView(voiceSw)
         col.addView(label(
-            "Detects your wake word at all times using the phone's speech recognizer.\n" +
-                "Activation delay is <1 second. The microphone stays active, which may use battery. " +
-                "Leave it off and long-press the island if you prefer manual triggering.",
+            "Say your wake word (\"lizmo\") at any time — the microphone is always ready.\n" +
+                "Change the wake word above to any name you prefer. The island pops up within ~1 second.",
             12f, a = 0.5f
         ))
 
@@ -306,6 +305,19 @@ class MainActivity : Activity() {
         ).also { it.setPadding(0, dp(24), 0, 0) })
 
         setContentView(scroll)
+
+        // ── First-launch auto-setup ───────────────────────────────────────────
+        // Voice listening defaults to ON. On the very first run, prompt for mic
+        // permission immediately so the wake word works right away.
+        if (Prefs.isFirstLaunch(this)) {
+            Prefs.setFirstLaunchDone(this)
+            if (!hasMic()) {
+                askMic(7)   // permission result → enableVoice() if granted
+            } else {
+                // Mic already available (re-install / emulator) — start right now
+                if (!VoiceService.running) enableVoice()
+            }
+        }
     }
 
     // ---------- permissions ----------
@@ -412,8 +424,8 @@ class MainActivity : Activity() {
         val n = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
             ?.contains(packageName) == true
         val o = Settings.canDrawOverlays(this)
-        s1.text = "1. Notification access: " + if (n) "ON \u2713" else "OFF"
-        s2.text = "2. Overlay permission: " + if (o) "ON \u2713" else "OFF"
+        s1.text = "1. Notification access: " + if (n) "ON ✓" else "OFF"
+        s2.text = "2. Overlay permission: " + if (o) "ON ✓" else "OFF"
         MediaListener.instance?.applyPrefs()
         syncing = true
         voiceSw.isChecked = Prefs.voiceOn(this)
@@ -422,7 +434,7 @@ class MainActivity : Activity() {
         VoiceBus.logListener = { msg -> runOnUiThread { voiceStatus.text = msg } }
         // Hook live RMS into our VU meter
         VoiceBus.rmsListener = { db -> updateVu(db) }
-        // restart the wake-word service if it was on but got killed
+        // Restart the wake-word service if it was on but got killed, or just needs starting
         if (Prefs.voiceOn(this) && !VoiceService.running && hasMic()) VoiceService.start(this)
     }
 

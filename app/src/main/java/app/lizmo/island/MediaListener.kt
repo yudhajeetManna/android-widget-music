@@ -25,6 +25,12 @@ class MediaListener : NotificationListenerService() {
         island = i
         t.start()
         applyPrefs()
+        // Auto-start always-on wake-word service if voice is enabled and mic permission granted
+        if (Prefs.voiceOn(this) && !VoiceService.running) {
+            val mic = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                      android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (mic) VoiceService.start(this)
+        }
     }
 
     override fun onListenerDisconnected() = shutdown()

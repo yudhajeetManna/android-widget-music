@@ -72,8 +72,13 @@ object Prefs {
     fun songLang(c: Context, key: String): String = sp(c).getString("sl:" + key.hashCode(), "auto") ?: "auto"
     fun setSongLang(c: Context, key: String, v: String) = sp(c).edit().putString("sl:" + key.hashCode(), v).apply()
 
-    fun voiceOn(c: Context): Boolean = sp(c).getBoolean("voice", false)
+    /** Defaults to true — always-on listening is enabled out of the box. */
+    fun voiceOn(c: Context): Boolean = sp(c).getBoolean("voice", true)
     fun setVoiceOn(c: Context, v: Boolean) = sp(c).edit().putBoolean("voice", v).apply()
+
+    /** True the very first time Lizmo runs (used to auto-request mic permission). */
+    fun isFirstLaunch(c: Context): Boolean = sp(c).getBoolean("first_launch", true)
+    fun setFirstLaunchDone(c: Context) = sp(c).edit().putBoolean("first_launch", false).apply()
 
     /** Microphone sensitivity: LOW / MEDIUM / HIGH */
     fun micSensitivity(c: Context): MicSensitivity =
