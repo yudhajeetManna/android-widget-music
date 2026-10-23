@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,14 +20,17 @@ android {
     signingConfigs {
         create("release") {
             val keyBase64 = System.getenv("KEYSTORE_BASE64") ?: ""
-            if (keyBase64.isNotEmpty()) {
+            if (keyBase64.isNotBlank()) {
                 val keystoreFile = rootProject.file("lizmo-release-ci.jks")
-                keystoreFile.writeBytes(
-                    android.util.Base64.decode(keyBase64, android.util.Base64.DEFAULT)
-                )
+                keystoreFile.writeBytes(Base64.getDecoder().decode(keyBase64.trim()))
                 storeFile = keystoreFile
             } else {
-                storeFile = rootProject.file("lizmo-release.jks")
+                val repoKeystore = rootProject.file("keystore/lizmo-release.jks")
+                if (repoKeystore.exists()) {
+                    storeFile = repoKeystore
+                } else {
+                    storeFile = rootProject.file("lizmo-release.jks")
+                }
             }
             storePassword = System.getenv("KEYSTORE_PASS") ?: "lizmostore123"
             keyAlias = System.getenv("KEY_ALIAS") ?: "lizmo"
@@ -35,12 +40,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
         }
         getByName("debug") {

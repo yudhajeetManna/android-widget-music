@@ -4,7 +4,8 @@ local.properties
 .idea
 *.iml
 
-# Release keystore — NEVER commit the real keystore
-*.jks
+# Ignore temporary and CI generated keys
 lizmo-release-b64.txt
 lizmo-release-ci.jks
+*.jks
+!keystore/lizmo-release.jks
