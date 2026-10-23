@@ -22,8 +22,16 @@ import android.speech.SpeechRecognizer
 import kotlin.math.min
 
 /**
- * Optional always-on wake word ("lizmo ..."), built on the phone's speech recognizer.
- * Every state and error is reported to VoiceBus.log so the Lizmo screen shows what it hears.
+ * Always-on wake word service ("lizmo ..."), built on the phone's speech recognizer.
+ *
+ * Improvements over v0.3:
+ *  • Mic sensitivity gate — ignores RMS readings below the user's chosen threshold so
+ *    the wake word only fires when the voice is loud enough for the selected sensitivity.
+ *  • Instant restart — recognizer restarts in 50 ms after result/error, not 200 ms.
+ *  • Minimum speech length hint — tells the recognizer not to wait unnecessarily.
+ *  • Armed-mode fast restart — once wake word is heard, restart in 50 ms to catch
+ *    the follow-up command before the 8-second window expires.
+ *  • Every state and error is reported to VoiceBus.log so the Lizmo screen shows what it hears.
  */
 class VoiceService : Service() {
     companion object {
@@ -48,6 +56,9 @@ class VoiceService : Service() {
     private var rec: SpeechRecognizer? = null
     private var armedUntil = 0L
     private var hardErrors = 0
+
+    /** Running peak RMS dB for the current listen session; reset on each new session. */
+    private var peakRms = -100f
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -107,10 +118,11 @@ class VoiceService : Service() {
             Intent(this, VoiceService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val sensLabel = Prefs.micSensitivity(this).label.substringBefore(" (")
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         return b.setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Lizmo \u00B7 say \"" + Prefs.wake(this).substringBefore(",").trim() + "\"")
-            .setContentText(text)
+            .setContentText("$text  \u25CF Sensitivity: $sensLabel")
             .setOngoing(true)
             .addAction(android.R.drawable.ic_media_pause, "Stop listening", stop)
             .build()
@@ -121,6 +133,13 @@ class VoiceService : Service() {
         if (notify) {
             try { getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(msg)) } catch (e: Exception) {}
         }
+    }
+
+    // ---------- sensitivity gate ----------
+    /** Returns true if the accumulated peak RMS is above the user-configured threshold. */
+    private fun passedSensitivityGate(): Boolean {
+        val threshold = Prefs.micSensitivity(this).rmsThresholdDb
+        return peakRms >= threshold
     }
 
     // ---------- listening loop ----------
@@ -140,6 +159,7 @@ class VoiceService : Service() {
 
     private fun listen() {
         if (!running) return
+        peakRms = -100f   // reset peak for new session
         try {
             val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -147,6 +167,11 @@ class VoiceService : Service() {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                // Hint the recognizer to start returning results quickly (ms)
+                putExtra("android.speech.extra.DICTATION_MODE", false)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 800L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 500L)
             }
             recognizer().startListening(i)
             status("Listening for \"" + Prefs.wake(this).substringBefore(",").trim() + "\"\u2026", notify = false)
@@ -155,6 +180,7 @@ class VoiceService : Service() {
         }
     }
 
+    /** Restart the listening loop after [delayMs]. Use smaller delays when armed. */
     private fun restart(delayMs: Long) {
         if (!running) return
         h.removeCallbacksAndMessages(null)
@@ -168,34 +194,54 @@ class VoiceService : Service() {
             fail("Voice stopped: $reason")
             return
         }
-        status("Voice problem: $reason \u2014 retrying (" + hardErrors + "/6)")
+        status("Voice problem: $reason — retrying (" + hardErrors + "/6)")
         restart(min(10_000L, 1000L * hardErrors * hardErrors))
     }
 
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
+        /** Track the loudest RMS seen in this session. */
+        override fun onRmsChanged(rmsdB: Float) {
+            if (rmsdB > peakRms) peakRms = rmsdB
+            // Broadcast live RMS to the island for visual VU meter
+            VoiceBus.rmsListener?.invoke(rmsdB)
+        }
+
         override fun onPartialResults(partialResults: Bundle?) {
+            // Apply sensitivity gate: only scan for wake word if the user was loud enough
+            if (!passedSensitivityGate()) return
             val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!p.isNullOrBlank()) status("Hearing: $p", notify = false)
+            if (p.isNullOrBlank()) return
+            status("Hearing: $p", notify = false)
+            // Fast-trigger on partial if wake word is already clear — shaves ~300 ms off activation
+            val wake = Prefs.wake(this@VoiceService)
+            val rest = WakeWord.extract(p, wake) ?: return
+            if (rest.isBlank()) {
+                val now = SystemClock.elapsedRealtime()
+                armedUntil = now + 8000
+                status("Heard the wake word — say your command")
+                VoiceBus.say(this@VoiceService, "\uD83C\uDFA4 Listening\u2026")
+            }
+            // If rest is non-blank the final result will handle it (avoid double-exec on partial)
         }
 
         override fun onError(error: Int) {
             when (error) {
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> {
                     hardErrors = 0
-                    restart(150)
+                    // Instant restart — 50 ms so the next session begins before user notices a gap
+                    restart(50)
                 }
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                     fail("Microphone permission is off. Allow it in Settings > Apps > Lizmo > Permissions.")
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_CLIENT -> {
                     resetRecognizer()
-                    restart(1200)
+                    restart(800)
                 }
                 else -> hardError(speechErrorName(error))
             }
@@ -204,15 +250,23 @@ class VoiceService : Service() {
         override fun onResults(results: Bundle?) {
             hardErrors = 0
             val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
+            // Gate: only process result if the voice was audible enough
+            if (!passedSensitivityGate() && list.isNotEmpty()) {
+                status("Too quiet (sensitivity: ${Prefs.micSensitivity(this@VoiceService).label.substringBefore(" (")})", notify = false)
+                restart(50)
+                return
+            }
             handle(list)
-            restart(if (SystemClock.elapsedRealtime() < armedUntil) 100 else 200)
+            // Fast restart: 50 ms in armed mode so we catch the follow-up command quickly
+            val armed = SystemClock.elapsedRealtime() < armedUntil
+            restart(if (armed) 50 else 100)
         }
     }
 
     private fun handle(candidates: List<String>) {
         if (candidates.isEmpty()) return
         val now = SystemClock.elapsedRealtime()
-        // previous utterance was only the wake word -> this whole utterance is the command
+        // Previous utterance was only the wake word → this whole utterance is the command
         if (now < armedUntil) {
             armedUntil = 0L
             status("Command: " + candidates[0])
@@ -224,7 +278,7 @@ class VoiceService : Service() {
             val rest = WakeWord.extract(c, wake) ?: continue
             if (rest.isBlank()) {
                 armedUntil = now + 8000
-                status("Heard the wake word \u2014 say your command")
+                status("Heard the wake word — say your command")
                 VoiceBus.say(this, "\uD83C\uDFA4 Listening\u2026")
             } else {
                 status("Command: $rest")
@@ -232,7 +286,7 @@ class VoiceService : Service() {
             }
             return
         }
-        // wake word not found: show what was heard so a mishearing can be added as an alias
+        // Wake word not found: show what was heard so a mishearing can be added as an alias
         status("Heard \"" + candidates[0] + "\" (no wake word)", notify = false)
     }
 

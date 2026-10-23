@@ -9,11 +9,38 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
+        <!-- Speech / voice -->
         <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.android.tts" />
+
+        <!-- Generic media play-from-search -->
         <intent><action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" /></intent>
+
+        <!-- Music platforms — needed for PackageManager.getPackageInfo() on Android 11+ -->
+        <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.jiosaavn.jio" />
+        <package android:name="com.gaana" />
+        <package android:name="com.wynk.music" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="soundcloud.android.playback" />
+        <package android:name="com.maxmpz.audioplayer" />
+        <package android:name="code.name.monkey.retromusic" />
+        <package android:name="com.martijncouprie.musicolet" />
+        <package android:name="com.sonyericsson.music" />
+
+        <!-- Deep-link URI schemes -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="spotify" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="jiosaavn" />
+        </intent>
     </queries>
 
     <application

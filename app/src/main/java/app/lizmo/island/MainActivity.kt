@@ -6,15 +6,20 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -26,14 +31,37 @@ class MainActivity : Activity() {
     private lateinit var s2: TextView
     private lateinit var voiceSw: Switch
     private lateinit var voiceStatus: TextView
+    private lateinit var vuBar: FrameLayout         // live VU meter fill
+    private lateinit var vuContainer: FrameLayout   // VU meter outer shell
     private var testRec: SpeechRecognizer? = null
     private var syncing = false
+    private val h = Handler(Looper.getMainLooper())
 
     private val langs = listOf("en-IN", "en-US", "en-GB")
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    // ----------- VU meter -----------
+    /** Update the live RMS bar. rmsdB is typically in the range –10 … +10 from Android. */
+    private fun updateVu(rmsdB: Float) {
+        runOnUiThread {
+            // Normalise to 0–1: Android reports roughly –2 .. 10 dB for normal speech
+            val pct = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+            val color = when {
+                pct < 0.4f -> Color.parseColor("#44FF44")   // green — quiet
+                pct < 0.75f -> Color.parseColor("#FFD700")  // yellow — medium
+                else -> Color.parseColor("#FF4444")         // red — loud / peak
+            }
+            val lp = FrameLayout.LayoutParams(
+                (vuContainer.width * pct).toInt().coerceAtLeast(dp(2)),
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            lp.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            (vuBar.background as? GradientDrawable)?.setColor(color)
+            vuBar.layoutParams = lp
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,7 +147,9 @@ class MainActivity : Activity() {
             startActivity(Intent(this, SearchActivity::class.java).putExtra(SearchActivity.EXTRA_VOICE, true))
         })
 
-        // ---------------- wake word ----------------
+        // ============================================================
+        // SECTION: Wake word
+        // ============================================================
         col.addView(label("Wake word", 18f, true).also { it.setPadding(0, dp(28), 0, dp(4)) })
         col.addView(label(
             "Say the wake word, then a command: \"lizmo pause\", \"lizmo volume 40\", \"lizmo play kesariya\". " +
@@ -142,6 +172,11 @@ class MainActivity : Activity() {
             } else {
                 Prefs.setWake(this, list.joinToString(", "))
                 Toast.makeText(this, "Saved: " + list.joinToString(", "), Toast.LENGTH_SHORT).show()
+                // Restart the service so it picks up the new wake word immediately
+                if (Prefs.voiceOn(this) && hasMic()) {
+                    VoiceService.stop(this)
+                    h.postDelayed({ VoiceService.start(this) }, 300)
+                }
             }
         })
 
@@ -155,12 +190,69 @@ class MainActivity : Activity() {
         refreshLangBtn()
         col.addView(langBtn)
 
+        // ============================================================
+        // SECTION: Microphone Sensitivity picker
+        // ============================================================
+        col.addView(label("Microphone Sensitivity", 18f, true).also { it.setPadding(0, dp(28), 0, dp(4)) })
+        col.addView(label(
+            "Controls how loud you need to speak before Lizmo reacts.\n" +
+                "• Low — whisper-friendly; may pick up background noise.\n" +
+                "• Medium — recommended; works at normal conversation distance.\n" +
+                "• High — only reacts to clear, loud speech; ideal in noisy rooms.",
+            12f, a = 0.6f
+        ))
+
+        val sensBtn = btn("") {}
+        fun refreshSensBtn() {
+            val s = Prefs.micSensitivity(this)
+            sensBtn.text = "Sensitivity: ${s.label}  ← tap to change"
+        }
+        sensBtn.setOnClickListener {
+            val next = Prefs.micSensitivity(this).next()
+            Prefs.setMicSensitivity(this, next)
+            refreshSensBtn()
+            Toast.makeText(this, "Sensitivity: ${next.label}", Toast.LENGTH_SHORT).show()
+        }
+        refreshSensBtn()
+        col.addView(sensBtn)
+
+        // ============================================================
+        // SECTION: Live VU meter + microphone test
+        // ============================================================
+        col.addView(label("Microphone level", 14f, bold = true).also { it.setPadding(0, dp(20), 0, dp(4)) })
+        col.addView(label("Shows the live audio level while the microphone is active.", 12f, a = 0.6f))
+
+        // Build VU meter bar
+        vuContainer = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(20)).apply {
+                setMargins(0, dp(8), 0, dp(4))
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1AFFFFFF"))
+                cornerRadius = dp(10).toFloat()
+            }
+        }
+        vuBar = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(dp(4), FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#44FF44"))
+                cornerRadius = dp(10).toFloat()
+            }
+        }
+        vuContainer.addView(vuBar)
+        col.addView(vuContainer)
+
         voiceStatus = label(VoiceBus.lastLog, 13f).also { it.setPadding(0, dp(12), 0, dp(4)) }
         col.addView(voiceStatus)
         col.addView(btn("Test microphone (say \"lizmo pause\")") { testMic() })
 
+        // ============================================================
+        // SECTION: Always-on wake word switch
+        // ============================================================
         voiceSw = Switch(this).apply {
-            this.text = "Always listen for wake word (experimental)"
+            this.text = "Always listen for wake word"
             setTextColor(Color.WHITE)
             isChecked = Prefs.voiceOn(this@MainActivity)
             setPadding(0, dp(12), 0, dp(8))
@@ -177,13 +269,31 @@ class MainActivity : Activity() {
         }
         col.addView(voiceSw)
         col.addView(label(
-            "Always-listening uses the phone's speech recognizer, so it can beep, lower your music and use " +
-                "battery. If you prefer, leave it off and long-press the island instead.",
+            "Detects your wake word at all times using the phone's speech recognizer.\n" +
+                "Activation delay is <1 second. The microphone stays active, which may use battery. " +
+                "Leave it off and long-press the island if you prefer manual triggering.",
             12f, a = 0.5f
         ))
 
         col.addView(btn("Battery settings (let it run in background)") {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        })
+
+        // ============================================================
+        // SECTION: Active music platform info
+        // ============================================================
+        col.addView(label("Active music platform", 18f, true).also { it.setPadding(0, dp(28), 0, dp(4)) })
+        val platformTv = label("Not detected yet — start playing music first.", 13f, a = 0.7f)
+        col.addView(platformTv)
+        col.addView(btn("Detect active platform") {
+            val pkg = Playback.activeMusicPackage(this)
+            platformTv.text = if (pkg != null) {
+                val name = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }
+                           catch (e: Exception) { pkg }
+                "\u25CF Active: $name ($pkg)\nVoice song search will play directly in $name."
+            } else {
+                "No active media session — open a music app and start playing first."
+            }
         })
 
         col.addView(label(
@@ -198,7 +308,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
     }
 
-    // ---------------- permissions ----------------
+    // ---------- permissions ----------
     private fun askMic(code: Int) {
         val perms = if (Build.VERSION.SDK_INT >= 33)
             arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
@@ -215,7 +325,6 @@ class MainActivity : Activity() {
             if (requestCode == 7) voiceSw.isChecked = false
             voiceStatus.text = "Microphone permission is off."
             if (!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-                // denied "don't ask again": the only way is the app settings page
                 Toast.makeText(this, "Turn on Microphone for Lizmo in Permissions", Toast.LENGTH_LONG).show()
                 startActivity(
                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
@@ -229,7 +338,7 @@ class MainActivity : Activity() {
         VoiceService.start(this)
     }
 
-    // ---------------- microphone test ----------------
+    // ---------- microphone test ----------
     private fun testMic() {
         if (!hasMic()) { askMic(8); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -238,6 +347,8 @@ class MainActivity : Activity() {
         }
         VoiceService.stop(this)   // only one recognizer can listen at a time
         voiceStatus.text = "Test: speak now\u2026"
+        // Reset VU bar
+        updateVu(-10f)
         try {
             testRec?.destroy()
             val r = SpeechRecognizer.createSpeechRecognizer(this)
@@ -245,7 +356,14 @@ class MainActivity : Activity() {
             r.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) { voiceStatus.text = "Test: listening\u2026" }
                 override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onRmsChanged(rmsdB: Float) {
+                    updateVu(rmsdB)
+                    val sens = Prefs.micSensitivity(this@MainActivity)
+                    val gate = if (rmsdB >= sens.rmsThresholdDb) "ACTIVE \u2713" else "too quiet"
+                    runOnUiThread {
+                        voiceStatus.text = "Level: %.1f dB  |  Gate [${sens.label.substringBefore(" (")}]: $gate".format(rmsdB)
+                    }
+                }
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -255,6 +373,7 @@ class MainActivity : Activity() {
                 }
                 override fun onError(error: Int) {
                     voiceStatus.text = "Test failed: " + speechErrorName(error)
+                    updateVu(-10f)
                     resumeVoiceIfOn()
                 }
                 override fun onResults(results: Bundle?) {
@@ -265,6 +384,7 @@ class MainActivity : Activity() {
                         rest.isBlank() -> "\u2705 wake word heard (no command)"
                         else -> "\u2705 wake word + command: \"$rest\""
                     }
+                    updateVu(-10f)
                     resumeVoiceIfOn()
                 }
             })
@@ -286,7 +406,7 @@ class MainActivity : Activity() {
         if (Prefs.voiceOn(this) && hasMic()) VoiceService.start(this)
     }
 
-    // ---------------- lifecycle ----------------
+    // ---------- lifecycle ----------
     override fun onResume() {
         super.onResume()
         val n = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
@@ -300,12 +420,15 @@ class MainActivity : Activity() {
         syncing = false
         voiceStatus.text = VoiceBus.lastLog
         VoiceBus.logListener = { msg -> runOnUiThread { voiceStatus.text = msg } }
-        // restart the wake-word service if it was on but got killed (allowed: we're in the foreground)
+        // Hook live RMS into our VU meter
+        VoiceBus.rmsListener = { db -> updateVu(db) }
+        // restart the wake-word service if it was on but got killed
         if (Prefs.voiceOn(this) && !VoiceService.running && hasMic()) VoiceService.start(this)
     }
 
     override fun onPause() {
         VoiceBus.logListener = null
+        VoiceBus.rmsListener = null
         super.onPause()
     }
 

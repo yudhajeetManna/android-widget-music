@@ -31,6 +31,19 @@ enum class IslandTheme(
     fun next(): IslandTheme = values()[(ordinal + 1) % values().size]
 }
 
+/**
+ * Voice sensitivity: controls the minimum RMS dB level the microphone must register
+ * before a partial result triggers the wake-word scan. Low = whisper-sensitive,
+ * High = only loud/clear speech triggers (useful in noisy environments).
+ */
+enum class MicSensitivity(val label: String, val rmsThresholdDb: Float) {
+    LOW("Low (whisper friendly)", -15f),      // fires on quiet speech; may pick up background noise
+    MEDIUM("Medium (recommended)", -8f),       // balanced: normal speaking distance
+    HIGH("High (loud/noisy room)", 0f);        // only fires on clear, loud speech
+
+    fun next(): MicSensitivity = values()[(ordinal + 1) % values().size]
+}
+
 object Prefs {
     private fun sp(c: Context) = c.getSharedPreferences("island", Context.MODE_PRIVATE)
 
@@ -61,4 +74,11 @@ object Prefs {
 
     fun voiceOn(c: Context): Boolean = sp(c).getBoolean("voice", false)
     fun setVoiceOn(c: Context, v: Boolean) = sp(c).edit().putBoolean("voice", v).apply()
+
+    /** Microphone sensitivity: LOW / MEDIUM / HIGH */
+    fun micSensitivity(c: Context): MicSensitivity =
+        try { MicSensitivity.valueOf(sp(c).getString("mic_sens", "MEDIUM") ?: "MEDIUM") }
+        catch (e: Exception) { MicSensitivity.MEDIUM }
+
+    fun setMicSensitivity(c: Context, v: MicSensitivity) = sp(c).edit().putString("mic_sens", v.name).apply()
 }

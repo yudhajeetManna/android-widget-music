@@ -17,6 +17,10 @@ object VoiceBus {
     @Volatile
     var logListener: ((String) -> Unit)? = null
 
+    /** Live RMS dB stream from the microphone (for VU meter display). */
+    @Volatile
+    var rmsListener: ((Float) -> Unit)? = null
+
     fun log(msg: String) {
         lastLog = msg
         logListener?.invoke(msg)
@@ -31,15 +35,15 @@ object VoiceBus {
 /** pause / play / next / previous / volume / mute / "play <song>" */
 object VoiceCommands {
     private val pauseRe = Regex("""(pause|stop|hold on|(pause|stop) (the )?(music|song|track|playback))""")
-    private val playRe = Regex("""(play|resume|continue|(play|resume) (the )?(music|song|track))""")
-    private val nextRe = Regex("""(next|skip|(next|skip) (this )?(song|track))""")
-    private val prevRe = Regex("""(previous|back|go back|(previous|last) (song|track))""")
-    private val upRe = Regex("""(volume up|louder|turn (it )?up|(increase|raise|turn up) (the )?volume|more volume)""")
-    private val downRe = Regex("""(volume down|quieter|softer|lower|turn (it )?down|(decrease|lower|turn down|reduce) (the )?volume|less volume)""")
-    private val maxRe = Regex("""((max|full|maximum) volume|volume (max|full|maximum))""")
-    private val muteRe = Regex("""(mute|mute (the )?(music|sound|volume))""")
-    private val unmuteRe = Regex("""(unmute|unmute (the )?(music|sound|volume))""")
-    private val setRe = Regex("""(set )?(the )?volume( to| at)? (\d{1,3})( ?%| percent)?""")
+    private val playRe  = Regex("""(play|resume|continue|(play|resume) (the )?(music|song|track))""")
+    private val nextRe  = Regex("""(next|skip|(next|skip) (this )?(song|track))""")
+    private val prevRe  = Regex("""(previous|back|go back|(previous|last) (song|track))""")
+    private val upRe    = Regex("""(volume up|louder|turn (it )?up|(increase|raise|turn up) (the )?volume|more volume)""")
+    private val downRe  = Regex("""(volume down|quieter|softer|lower|turn (it )?down|(decrease|lower|turn down|reduce) (the )?volume|less volume)""")
+    private val maxRe   = Regex("""((max|full|maximum) volume|volume (max|full|maximum))""")
+    private val muteRe  = Regex("""(mute|mute (the )?(music|sound|volume))""")
+    private val unmuteRe= Regex("""(unmute|unmute (the )?(music|sound|volume))""")
+    private val setRe   = Regex("""(set )?(the )?volume( to| at)? (\d{1,3})( ?%| percent)?""")
 
     private fun norm(s: String): String =
         s.lowercase().replace(Regex("""[^\p{L}\p{N}%\s]"""), " ").replace(Regex("""\s+"""), " ").trim()
@@ -53,16 +57,16 @@ object VoiceCommands {
     fun run(ctx: Context, raw: String): String {
         val t = norm(raw)
         return when {
-            pauseRe.matches(t) -> { Playback.pause(ctx); "Paused" }
-            playRe.matches(t) -> { Playback.resume(ctx); "Playing" }
-            nextRe.matches(t) -> { Playback.next(ctx); "Next" }
-            prevRe.matches(t) -> { Playback.prev(ctx); "Previous" }
-            upRe.matches(t) -> { step(ctx, true); "Volume up" }
-            downRe.matches(t) -> { step(ctx, false); "Volume down" }
-            maxRe.matches(t) -> { setPct(ctx, 100); "Volume max" }
-            muteRe.matches(t) -> { mute(ctx, true); "Muted" }
-            unmuteRe.matches(t) -> { mute(ctx, false); "Unmuted" }
-            setRe.matches(t) -> {
+            pauseRe.matches(t)  -> { Playback.pause(ctx);  "Paused" }
+            playRe.matches(t)   -> { Playback.resume(ctx); "Playing" }
+            nextRe.matches(t)   -> { Playback.next(ctx);   "Next" }
+            prevRe.matches(t)   -> { Playback.prev(ctx);   "Previous" }
+            upRe.matches(t)     -> { step(ctx, true);      "Volume up" }
+            downRe.matches(t)   -> { step(ctx, false);     "Volume down" }
+            maxRe.matches(t)    -> { setPct(ctx, 100);     "Volume max" }
+            muteRe.matches(t)   -> { mute(ctx, true);      "Muted" }
+            unmuteRe.matches(t) -> { mute(ctx, false);     "Unmuted" }
+            setRe.matches(t)    -> {
                 val n = setRe.matchEntire(t)!!.groupValues[4].toInt().coerceIn(0, 100)
                 setPct(ctx, n)
                 "Volume $n%"
@@ -96,7 +100,7 @@ object VoiceCommands {
         } catch (e: Exception) {}
     }
 
-    /** Anything else = a song request: find it, play the best match. */
+    /** Anything else = a song request: find it, play in the active music platform. */
     private fun search(ctx: Context, raw: String): String {
         val q = Catalog.cleanVoice(raw)
         if (q.length < 2) return "Didn't catch that"
@@ -104,7 +108,7 @@ object VoiceCommands {
             val s = res?.firstOrNull()
             val msg = when {
                 res == null -> "Couldn't search \u2014 check internet"
-                s == null -> "No match for \"$q\""
+                s == null   -> "No match for \"$q\""
                 Playback.play(ctx, s) -> "Playing " + s.title
                 else -> "No music app could play " + s.title
             }
@@ -153,7 +157,7 @@ object WakeWord {
             var ok = true
             for (k in w.indices) if (!close(t[i + k], w[k])) { ok = false; break }
             if (ok) return t.drop(i + w.size).joinToString(" ")
-            // "lis mo" -> "lismo"
+            // "lis mo" → "lismo"
             if (w.size == 1 && i + 1 < t.size && close(t[i] + t[i + 1], w[0])) {
                 return t.drop(i + 2).joinToString(" ")
             }
@@ -163,15 +167,15 @@ object WakeWord {
 }
 
 fun speechErrorName(code: Int): String = when (code) {
-    1 -> "network timeout"
-    2 -> "no internet (speech needs a connection)"
-    3 -> "audio/microphone problem"
-    4 -> "speech server error"
-    5 -> "recognizer client error"
-    6 -> "no speech heard"
-    7 -> "didn't understand"
-    8 -> "recognizer busy"
-    9 -> "microphone permission missing"
+    1  -> "network timeout"
+    2  -> "no internet (speech needs a connection)"
+    3  -> "audio/microphone problem"
+    4  -> "speech server error"
+    5  -> "recognizer client error"
+    6  -> "no speech heard"
+    7  -> "didn't understand"
+    8  -> "recognizer busy"
+    9  -> "microphone permission missing"
     10 -> "too many requests"
     11 -> "speech service disconnected"
     12 -> "language not supported"
