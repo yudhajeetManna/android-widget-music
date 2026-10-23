@@ -113,6 +113,91 @@ object Playback {
         if (c != null) c.transportControls.skipToPrevious() else key(ctx, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
     }
 
+    /** Seek to start (position 0 ms). */
+    fun restart(ctx: Context) {
+        controller(ctx)?.transportControls?.seekTo(0L)
+    }
+
+    /** Seek forward/backward by [deltaMs] milliseconds. Positive = forward, negative = rewind. */
+    fun seek(ctx: Context, deltaMs: Long) {
+        val c = controller(ctx) ?: return
+        val current = c.playbackState?.position ?: 0L
+        c.transportControls.seekTo((current + deltaMs).coerceAtLeast(0L))
+    }
+
+    /** Toggle shuffle. Uses the PlaybackState custom action if available, else sends a keycode. */
+    fun shuffle(ctx: Context) {
+        val c = controller(ctx)
+        if (c != null) {
+            // Standard Android shuffle action
+            try { c.transportControls.setShuffleMode(
+                if (c.shuffleMode == android.media.session.PlaybackState.SHUFFLE_MODE_NONE)
+                    android.media.session.PlaybackState.SHUFFLE_MODE_ALL
+                else android.media.session.PlaybackState.SHUFFLE_MODE_NONE
+            ) } catch (e: Exception) {
+                key(ctx, KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD) // best-effort fallback
+            }
+        }
+    }
+
+    /** Cycle repeat mode: NONE → ONE → ALL → NONE. */
+    fun repeat(ctx: Context) {
+        val c = controller(ctx)
+        if (c != null) {
+            try {
+                val next = when (c.repeatMode) {
+                    android.media.session.PlaybackState.REPEAT_MODE_NONE -> android.media.session.PlaybackState.REPEAT_MODE_ONE
+                    android.media.session.PlaybackState.REPEAT_MODE_ONE  -> android.media.session.PlaybackState.REPEAT_MODE_ALL
+                    else -> android.media.session.PlaybackState.REPEAT_MODE_NONE
+                }
+                c.transportControls.setRepeatMode(next)
+            } catch (e: Exception) {}
+        }
+    }
+
+    /** Send a "like" (thumbs up) rating to the active session. Returns true if supported. */
+    fun like(ctx: Context): Boolean {
+        return try {
+            val c = controller(ctx) ?: return false
+            c.transportControls.setRating(android.media.Rating.newThumbRating(true))
+            true
+        } catch (e: Exception) { false }
+    }
+
+    /** Send a "dislike" (thumbs down) rating to the active session. Returns true if supported. */
+    fun dislike(ctx: Context): Boolean {
+        return try {
+            val c = controller(ctx) ?: return false
+            c.transportControls.setRating(android.media.Rating.newThumbRating(false))
+            true
+        } catch (e: Exception) { false }
+    }
+
+    /** Stop playback completely (not just pause). */
+    fun stop(ctx: Context) {
+        val c = controller(ctx)
+        if (c != null) c.transportControls.stop() else key(ctx, KeyEvent.KEYCODE_MEDIA_STOP)
+    }
+
+    /** Returns "Title – Artist" of the currently playing track, or null. */
+    fun nowPlaying(ctx: Context): String? {
+        val c = controller(ctx) ?: return null
+        val m = c.metadata ?: return null
+        val title = m.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) ?: return null
+        val artist = m.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+        return if (artist.isNullOrBlank()) title else "$title – $artist"
+    }
+
+    /** Current volume as 0–100%, or null if unavailable. */
+    fun volumePct(ctx: Context): Int? {
+        return try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val cur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (max == 0) null else (cur * 100 / max)
+        } catch (e: Exception) { null }
+    }
+
     // ---------- song search & play ----------
 
     /**

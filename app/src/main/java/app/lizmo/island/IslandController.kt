@@ -87,6 +87,9 @@ class IslandController(private val ctx: Context, private val tracker: MediaTrack
     private val modeTv = TextView(ctx)
     private val extras: List<View> = listOf(lyricBox, bar, controls)
 
+    /** Command HUD banner — shown briefly when a voice command fires. */
+    private val hudTv = TextView(ctx)
+
     private val expandEase = PathInterpolator(0.34f, 1.3f, 0.64f, 1f)   // gentle spring overshoot
     private val collapseEase = PathInterpolator(0.4f, 0f, 0.2f, 1f)
 
@@ -116,6 +119,7 @@ class IslandController(private val ctx: Context, private val tracker: MediaTrack
         applyTheme()
         applyState(0f)
         VoiceBus.island = { msg -> flash(msg) }
+        VoiceBus.commandHud = { label -> showCommandHud(label) }
     }
 
     private fun collapsedW() = min(dp(240), screenW() - dp(48))
@@ -219,6 +223,24 @@ class IslandController(private val ctx: Context, private val tracker: MediaTrack
         }
         controls.addView(themeTv, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(controls, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // Command HUD — overlaid on top of the root, centred; hidden until a command fires
+        hudTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        hudTv.setTypeface(hudTv.typeface, Typeface.BOLD)
+        hudTv.setTextColor(Color.WHITE)
+        hudTv.gravity = Gravity.CENTER
+        hudTv.setPadding(dp(14), dp(6), dp(14), dp(6))
+        hudTv.background = GradientDrawable().apply {
+            setColor(Color.parseColor("#CC1A1A2E"))
+            cornerRadius = dp(20).toFloat()
+            setStroke(dp(1), Color.parseColor("#557C5CFF"))
+        }
+        hudTv.visibility = View.GONE
+        hudTv.elevation = dp(8).toFloat()
+        root.addView(hudTv, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(4) })
     }
 
     /** Tap = type a search; long-press = voice (say a song, or "pause", "volume 50"...). */
@@ -413,10 +435,39 @@ class IslandController(private val ctx: Context, private val tracker: MediaTrack
 
     fun destroy() {
         VoiceBus.island = null
+        VoiceBus.commandHud = null
         h.removeCallbacksAndMessages(null)
         attached = false
         anim?.cancel()
         try { wm.removeView(root) } catch (e: Exception) {}
+    }
+
+    /**
+     * Flash an emoji+label command banner (e.g. "⏭ Next") on the island for 1.8 s.
+     * Shown only when the island is attached; otherwise VoiceBus.showCommand() sends a Toast.
+     */
+    private fun showCommandHud(label: String) {
+        if (!attached) return
+        h.post {
+            hudTv.text = label
+            hudTv.visibility = View.VISIBLE
+            hudTv.alpha = 0f
+            hudTv.translationY = dp(-6).toFloat()
+            hudTv.animate().cancel()
+            hudTv.animate()
+                .alpha(1f).translationY(0f)
+                .setDuration(180)
+                .setInterpolator(OvershootInterpolator(1.5f))
+                .withEndAction {
+                    h.postDelayed({
+                        hudTv.animate()
+                            .alpha(0f).translationY(dp(-4).toFloat())
+                            .setDuration(250)
+                            .withEndAction { hudTv.visibility = View.GONE }
+                            .start()
+                    }, 1600)
+                }.start()
+        }
     }
 
     private fun flash(msg: String): Boolean {
