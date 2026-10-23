@@ -4,14 +4,14 @@
 
 **Dynamic Island Floating Music Overlay with Synchronized Karaoke Lyrics, Real-Time Translation, and Hands-Free Voice Control for Android.**
 
-[![Release](https://img.shields.io/badge/Release-v0.4.0%20(Signed)-blueviolet?style=for-the-badge&logo=android)](https://github.com/yudhajeetManna/android-widget-music/releases)
+[![Release](https://img.shields.io/badge/Release-v0.6.0%20(Signed)-blueviolet?style=for-the-badge&logo=android)](https://github.com/yudhajeetManna/android-widget-music/releases)
 [![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-brightgreen?style=for-the-badge&logo=android)](https://developer.android.com)
 [![Build Status](https://img.shields.io/badge/Build-Automated%20CI%2FCD-success?style=for-the-badge&logo=githubactions)](https://github.com/yudhajeetManna/android-widget-music/actions)
 [![Security](https://img.shields.io/badge/Security-Signed%20Release%20Key-blue?style=for-the-badge)](#-why-is-it-safe)
 [![Privacy](https://img.shields.io/badge/Privacy-Zero%20Telemetry-blue?style=for-the-badge)](#-privacy--permissions)
 [![License](https://img.shields.io/badge/License-MIT-orange?style=for-the-badge)](LICENSE)
 
-[**📥 Download Latest Signed APK**](https://github.com/yudhajeetManna/android-widget-music/releases/latest/download/Lizmo.apk) • [**✨ Features**](#-features) • [**🚀 Installation**](#-quick-installation-guide) • [**🗣️ Voice Commands**](#-voice-commands-cheat-sheet) • [**🛠️ Troubleshooting**](#%EF%B8%8F-troubleshooting)
+[**📥 Download Latest Signed APK (v0.6.0)**](https://github.com/yudhajeetManna/android-widget-music/releases/latest/download/Lizmo.apk) • [**✨ Features**](#-features) • [**🚀 Installation**](#-quick-installation-guide) • [**🗣️ Voice Commands**](#-voice-commands-cheat-sheet) • [**🛠️ Troubleshooting**](#%EF%B8%8F-troubleshooting)
 
 </div>
 
@@ -40,6 +40,18 @@
 
 ---
 
+## 🌟 What's New in v0.6.0
+
+| Feature | Description |
+| :--- | :--- |
+| 🎮 **Full Voice Media Controls** | 20+ commands: pause, play, next, back, restart, stop, shuffle (on/off), repeat (one/all/off), seek (+/- 30s, jump to min), like/dislike, volume queries & steps. |
+| 🖥️ **Dynamic Command HUD** | Real-time animated pill banner on the island confirming every voice action with emojis and spring overshoot physics. |
+| 🎯 **Active Music App Auto-Play** | Automatically detects your currently active streaming app (Spotify, YouTube Music, Apple Music, JioSaavn, SoundCloud, VLC, etc.) and routes song searches directly. |
+| 🎙️ **Microphone Hearing Levels** | Low, Medium, and High sensitivity modes with adaptive noise floor tuning for whispering, normal speech, and loud/noisy rooms. |
+| ⚡ **Instant Wake Word Response** | <50ms phoneme wake-word detection; island pops up on screen within seconds of saying `"lizmo"`. |
+
+---
+
 ## 🛡️ Why is it Safe?
 
 | Security Check | Status | Details |
@@ -58,7 +70,7 @@
 
 ### 1. Download
 Get the latest signed build directly from GitHub Releases:
-* **[👉 Download Lizmo.apk (Latest v0.4.0 Signed Release)](https://github.com/yudhajeetManna/android-widget-music/releases/latest/download/Lizmo.apk)**
+* **[👉 Download Lizmo.apk (Latest v0.6.0 Signed Release)](https://github.com/yudhajeetManna/android-widget-music/releases/latest/download/Lizmo.apk)**
 
 ### 2. Install & Grant Permissions
 1. Open the downloaded `Lizmo.apk` and tap **Install** (allow *Install from Unknown Sources* if prompted by your browser).
@@ -106,26 +118,62 @@ Switch aesthetics on the fly by tapping the theme chip on the expanded island or
 | **Sunset** | Radiant Gradient | Warm pink-to-purple vibrant gradient |
 | **Mono** | Clean Daylight Light | High-contrast clean monochrome for bright ambient light |
 
-### 🗣️ Voice Control & Custom Wake Word
-- **Hands-Free Control**: Change tracks, pause, adjust volume, or launch any song using natural voice speech.
-- **Custom Wake Word Engine**: Default wake word is `lizmo` (with phonetic tolerance for `lismo`, `limo`, `lizma`). Customize to your favorite name.
-- **Instant Trigger**: Long-press the floating pill or the search icon to trigger voice recognition immediately without saying the wake word.
-- **Built-in Microphone Diagnostic**: Dedicated test tool in settings that visualizes what the phone heard, wake word matching status, and speech error diagnostics.
+### 🗣️ Smart Voice Control & Hands-Free Media
+- **Custom Wake Word Engine**: Default wake word is `lizmo` (with phonetic tolerance for `lismo`, `limo`, `lizma`). Set any custom name you prefer.
+- **Instant Response**: Under 50ms trigger detection; overlay springs up immediately when spoken to.
+- **Microphone Hearing Levels**: Choose between **Low**, **Medium**, and **High** sensitivity depending on ambient noise.
+- **Active Music Player Routing**: Saying *"play [Song]"* checks which music app you were using and opens the track right there.
+- **Command HUD Overlay**: Instant visual confirmation banner for every command right above the island.
 
 ---
 
 ## 🗣️ Voice Commands Cheat Sheet
 
-Say your wake word followed by any of these phrases, or long-press the island to speak directly:
+Say your wake word followed by any of these phrases (e.g. `"lizmo pause"`), or long-press the island to speak directly:
 
-| Command Type | What to Say | Action |
+### ⏸ Playback
+| Command | Alternative Phrases | Action |
 | :--- | :--- | :--- |
-| **Play / Pause** | *"lizmo pause"*, *"hold on"*, *"lizmo resume"*, *"play the music"* | Toggles playback state |
-| **Track Navigation** | *"lizmo next"*, *"skip this track"*, *"lizmo back"*, *"previous song"* | Changes track |
-| **Volume Adjustment** | *"lizmo volume up"*, *"turn it up"*, *"louder"*, *"volume down"*, *"quieter"* | Steps volume up or down |
-| **Precise Volume** | *"lizmo set volume to 50%"*, *"volume 80"*, *"volume max"* | Sets absolute media volume |
-| **Mute / Unmute** | *"lizmo mute"*, *"lizmo unmute"* | Mutes or restores audio |
-| **Play Specific Song** | *"lizmo play Kesariya"*, *"play Starboy by The Weeknd"*, *"play Diljit"* | Searches iTunes catalog and launches track in your music player |
+| **Pause** | *"pause"*, *"hold on"*, *"pause music"* | ⏸ Pauses playback |
+| **Resume / Play** | *"play"*, *"resume"*, *"continue"* | ▶ Resumes music |
+| **Next Track** | *"next"*, *"skip"*, *"next track"*, *"skip song"* | ⏭ Skips to next song |
+| **Previous Track** | *"previous"*, *"go back"*, *"last song"* | ⏮ Jumps to previous track |
+| **Restart Track** | *"restart"*, *"play from the beginning"*, *"replay"* | ⏪ Seeks back to 0:00 |
+| **Stop Music** | *"stop music"*, *"stop playing"* | ⏹ Stops media playback |
+
+### ⏩ Seeking & Progress
+| Command | Example Phrases | Action |
+| :--- | :--- | :--- |
+| **Fast Forward** | *"skip forward 30 seconds"*, *"fast forward 1 minute"* | ⏩ Jumps ahead by duration |
+| **Rewind** | *"rewind 15 seconds"*, *"go back 20 seconds"* | ⏪ Jumps back by duration |
+| **Jump to Timestamp** | *"jump to 2 minutes"*, *"jump to 1 minute 30 seconds"* | 📍 Seeks directly to time |
+
+### 🔊 Volume
+| Command | Example Phrases | Action |
+| :--- | :--- | :--- |
+| **Volume Up** | *"volume up"*, *"turn it up"*, *"louder"* | 🔊 Increases volume by 1 step |
+| **Volume Down** | *"volume down"*, *"quieter"*, *"softer"* | 🔉 Decreases volume by 1 step |
+| **Set Exact Percentage** | *"set volume to 50%"*, *"volume 80"*, *"volume 30 percent"* | 🎚 Sets volume to exact level (0-100) |
+| **Max Volume** | *"volume max"*, *"max volume"*, *"maximum volume"* | 📢 Sets volume to 100% |
+| **Mute / Unmute** | *"mute"*, *"unmute"* | 🔇 Mutes / restores volume |
+| **Query Volume** | *"what's the volume"*, *"volume level"* | ℹ️ Reads out current volume % |
+
+### 🔀 Shuffle & 🔁 Repeat
+| Command | Example Phrases | Action |
+| :--- | :--- | :--- |
+| **Shuffle On** | *"shuffle"*, *"shuffle on"*, *"turn on shuffle"* | 🔀 Enables shuffle |
+| **Shuffle Off** | *"shuffle off"*, *"turn off shuffle"* | ➡ Disables shuffle |
+| **Repeat Song** | *"repeat this song"*, *"repeat one"*, *"loop this"* | 🔂 Repeats single track |
+| **Repeat Playlist** | *"repeat all"*, *"loop playlist"* | 🔁 Repeats all tracks |
+| **Repeat Off** | *"repeat off"*, *"no repeat"* | ➡ Normal linear playback |
+
+### ❤️ Like & ℹ️ Info
+| Command | Example Phrases | Action |
+| :--- | :--- | :--- |
+| **Like / Favorite** | *"like this"*, *"thumbs up"*, *"save this song"* | ❤ Rates / likes track |
+| **Dislike** | *"dislike"*, *"thumbs down"* | 👎 Dislikes track |
+| **What's Playing** | *"what's playing"*, *"what song is this"* | 🎵 Reads title & artist |
+| **Search & Play** | *"play Kesariya"*, *"play Starboy by The Weeknd"* | 🔍 Finds track & plays in active app |
 
 ---
 
@@ -145,7 +193,8 @@ Say your wake word followed by any of these phrases, or long-press the island to
 <details>
 <summary><b>2. Voice commands / Wake word not responding</b></summary>
 
-- Tap **Test microphone** on the Lizmo main screen.
+- Tap **Test microphone** on the Lizmo main screen to see live audio levels.
+- Adjust **Microphone Hearing Level** between Low, Medium, and High in Settings based on your room volume.
 - Ensure Google Speech Services / Google App is installed and enabled as the default speech recognition engine.
 - If the test shows that your phone mishears your accent or pronunciation (e.g., hearing "lesmo" instead of "lizmo"), add your spelling to the **Wake word** input separated by commas (e.g., `lizmo, lesmo, lismo`).
 - Always-on listening requires the microphone foreground service. If you prefer to save battery, keep always-listening OFF and simply **long-press the island** to speak.

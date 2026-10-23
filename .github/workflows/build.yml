@@ -42,23 +42,34 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.4.${{ github.run_number }}
-          name: "Lizmo v0.4.${{ github.run_number }} - Signed Release"
+          tag_name: v0.6.${{ github.run_number }}
+          name: "Lizmo v0.6.${{ github.run_number }} - Signed Release"
           body: |
-            ## 🏝️ Lizmo v0.4.${{ github.run_number }}
+            ## 🏝️ Lizmo v0.6.${{ github.run_number }}
 
             ### 🛡️ Signed & Safe Release
             This APK is built and signed with the official Lizmo release key.
             It is **not** a debug build — no test certificates, no Google Play Protect warnings.
 
-            ### 🌟 What's New in v0.4
-            - **Dynamic Island Overlay**: iOS-style pill floating above all apps with responsive expand/collapse animations.
-            - **Synced Karaoke Lyrics**: Real-time LRCLIB and NetEase karaoke lyric synchronization.
-            - **Live English Translation**: Real-time lyric translation into English with language override selector.
-            - **5 Designer Themes**: Glass, Neon, Minimal (100% OLED black), Sunset, and Mono.
-            - **Smart Voice Control**: Custom phonetic wake word (`lizmo`), track skipping, volume control, and iTunes song search.
+            ### 🌟 What's New in v0.6.0
+            - 🎮 **Full Voice Media Controls**: 20+ hands-free voice commands:
+              - ⏸ **Playback**: pause, resume, next, back/previous, restart (0:00), stop.
+              - 🔀 **Shuffle**: shuffle on, shuffle off, toggle shuffle.
+              - 🔁 **Repeat Modes**: repeat one / repeat song, repeat all / playlist, repeat off.
+              - ⏩ **Seeking**: fast-forward X seconds, seek back X seconds, jump to MM:SS.
+              - 🔊 **Volume**: step up/down, set volume percentage ("volume 50%"), max volume, mute, unmute, query volume level.
+              - ❤️ **Like / Dislike**: thumbs up / like current song, thumbs down / dislike.
+              - ℹ️ **Track Query**: "what's playing?", "what song is this?".
+            - 🖥️ **On-Screen Command HUD**: Dynamic pill banner sliding into the island confirming every action in real time with haptics.
+            - 🎯 **Active Music Platform Detection**: Automatically detects active player (Spotify, YouTube Music, Apple Music, JioSaavn, SoundCloud, VLC, etc.) and routes playback searches seamlessly.
+            - 🎙️ **Microphone Hearing & Sensitivity Levels**: Low, Medium, and High sensitivity profiles for quiet, normal, and noisy environments.
+            - ⚡ **Instant Wake Word (<50ms)**: Fast phoneme wake-word matcher; island springs up in seconds.
+            - 🏝️ **Dynamic Island Overlay**: iOS-style pill floating above all apps with responsive expand/collapse animations.
+            - 🎤 **Synced Karaoke Lyrics**: Real-time LRCLIB and NetEase karaoke lyric synchronization.
+            - 🌐 **Live English Translation**: Real-time lyric translation into English with language override selector.
+            - 🎨 **5 Designer Themes**: Glass, Neon, Minimal (100% OLED black), Sunset, and Mono.
 
-            ### 📲 Installation
+            ### 📲 Quick Installation
             1. Download **Lizmo.apk** below.
             2. Open the APK and tap **Install** (allow *Install from Unknown Sources* if prompted).
             3. Launch **Lizmo** and grant Notification Access and Overlay permissions.
