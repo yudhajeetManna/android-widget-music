@@ -86,4 +86,22 @@ object Prefs {
         catch (e: Exception) { MicSensitivity.MEDIUM }
 
     fun setMicSensitivity(c: Context, v: MicSensitivity) = sp(c).edit().putString("mic_sens", v.name).apply()
+
+    /** Picovoice AccessKey (free from console.picovoice.ai) */
+    fun picoKey(c: Context): String = sp(c).getString("pico", "") ?: ""
+    fun setPicoKey(c: Context, v: String) = sp(c).edit().putString("pico", v).apply()
+
+    /** Built-in wake word used when no custom .ppn file is imported (e.g. "JARVIS", "PICOVOICE", "COMPUTER"). */
+    fun builtin(c: Context): String = sp(c).getString("builtin", "JARVIS") ?: "JARVIS"
+    fun setBuiltin(c: Context, v: String) = sp(c).edit().putString("builtin", v).apply()
+
+    /** "Only respond to my voice" (speaker lock) and how strict it is: 0 relaxed (0.30), 1 balanced (0.45), 2 strict (0.60). */
+    fun lock(c: Context): Boolean = sp(c).getBoolean("lock", false)
+    fun setLock(c: Context, v: Boolean) = sp(c).edit().putBoolean("lock", v).apply()
+    fun lockLevel(c: Context): Int = sp(c).getInt("lockLevel", 1)
+    fun setLockLevel(c: Context, v: Int) = sp(c).edit().putInt("lockLevel", v).apply()
+
+    /** "always" = mic ready for wake word at all times; "music" = mic only while music is playing. */
+    fun micMode(c: Context): String = sp(c).getString("micMode", "always") ?: "always"
+    fun setMicMode(c: Context, v: String) = sp(c).edit().putString("micMode", v).apply()
 }

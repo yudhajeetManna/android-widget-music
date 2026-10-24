@@ -66,10 +66,25 @@
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".EnrollActivity"
+            android:exported="false" />
+
         <service
             android:name=".VoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".VoiceTile"
+            android:exported="true"
+            android:icon="@android:drawable/ic_btn_speak_now"
+            android:label="Lizmo Voice"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".MediaListener"

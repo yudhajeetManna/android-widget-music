@@ -1,8 +1,6 @@
 package app.lizmo.island
 
 import android.Manifest
-import android.animation.ArgbEvaluator
-import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -21,41 +19,40 @@ import android.speech.SpeechRecognizer
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 
 class MainActivity : Activity() {
 
-    // ── field refs needed across methods ──────────────────────────────────────
-    private lateinit var s1: TextView          // notification access status
-    private lateinit var s1Chip: TextView
-    private lateinit var s2: TextView          // overlay permission status
-    private lateinit var s2Chip: TextView
-    private lateinit var s3: TextView          // mic permission status
-    private lateinit var s3Chip: TextView
+    // ── Field references across methods ───────────────────────────────────────
+    private lateinit var s1Chip: TextView          // notification access status
+    private lateinit var s2Chip: TextView          // overlay permission status
+    private lateinit var s3Chip: TextView          // mic permission status
     private lateinit var voiceSw: Switch
     private lateinit var voiceStatus: TextView
     private lateinit var vuBar: FrameLayout
     private lateinit var vuContainer: FrameLayout
     private lateinit var platformTv: TextView
+    private lateinit var voiceLockSw: Switch
+    private lateinit var enrollStatusTv: TextView
+    private lateinit var deleteVoiceBtn: TextView
 
     private var testRec: SpeechRecognizer? = null
     private var syncing = false
     private val h = Handler(Looper.getMainLooper())
     private val langs = listOf("en-IN", "en-US", "en-GB", "hi-IN")
+    private val builtins = listOf("JARVIS", "PICOVOICE", "COMPUTER", "BUMBLEBEE")
 
-    // ── colours ───────────────────────────────────────────────────────────────
+    // ── Colours ───────────────────────────────────────────────────────────────
     private val BG       = Color.parseColor("#07070C")
     private val CARD     = Color.parseColor("#12121A")
-    private val CARD2    = Color.parseColor("#1A1A26")
     private val ACCENT   = Color.parseColor("#7C5CFC")   // purple
     private val ACCENT2  = Color.parseColor("#4F8EF7")   // blue
     private val GREEN    = Color.parseColor("#22C55E")
@@ -65,9 +62,8 @@ class MainActivity : Activity() {
     private val DIM      = Color.parseColor("#99FFFFFF")
     private val DIMMER   = Color.parseColor("#55FFFFFF")
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-    private fun sp(v: Float): Float = v   // textSize is already sp
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     /** A styled dark card with rounded corners and optional accent left-border. */
@@ -78,7 +74,6 @@ class MainActivity : Activity() {
             content()
         }
         return if (accentColor != 0) {
-            // Card with left accent stripe
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 background = GradientDrawable().apply {
@@ -86,7 +81,6 @@ class MainActivity : Activity() {
                     cornerRadius = dp(14).toFloat()
                 }
                 elevation = dp(2).toFloat()
-                // accent stripe
                 addView(View(context).apply {
                     layoutParams = LinearLayout.LayoutParams(dp(4), LinearLayout.LayoutParams.MATCH_PARENT)
                     background = GradientDrawable().apply {
@@ -122,7 +116,6 @@ class MainActivity : Activity() {
             if (bold) setTypeface(typeface, Typeface.BOLD)
         }
 
-    /** A rounded pill chip for status display. */
     private fun chip(text: String, bg: Int, textColor: Int = WHITE): TextView =
         TextView(this).apply {
             this.text = text
@@ -136,7 +129,6 @@ class MainActivity : Activity() {
             }
         }
 
-    /** A styled primary action button. */
     private fun primaryBtn(text: String, bg: Int = ACCENT, onClick: () -> Unit): TextView =
         TextView(this).apply {
             this.text = text
@@ -152,7 +144,6 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
         }
 
-    /** A secondary ghost button. */
     private fun ghostBtn(text: String, onClick: () -> Unit): TextView =
         TextView(this).apply {
             this.text = text
@@ -168,7 +159,6 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
         }
 
-    /** Section header with emoji icon. */
     private fun sectionHeader(emoji: String, title: String): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -178,13 +168,11 @@ class MainActivity : Activity() {
             addView(tv(title, 17f, WHITE, bold = true))
         }
 
-    /** A "how to use" row with a numbered badge and instruction text. */
     private fun stepRow(num: String, title: String, sub: String, accent: Int = ACCENT): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
             setPadding(0, dp(6), 0, dp(6))
-            // number badge
             addView(TextView(context).apply {
                 text = num
                 textSize = 12f
@@ -198,7 +186,6 @@ class MainActivity : Activity() {
                 }
                 layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = dp(12); topMargin = dp(2) }
             })
-            // text column
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -207,13 +194,11 @@ class MainActivity : Activity() {
             })
         }
 
-    /** A voice command example row. */
     private fun commandRow(say: String, action: String): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(5), dp(4), dp(5))
-            // "say" pill
             addView(TextView(context).apply {
                 text = "\"$say\""
                 textSize = 12f
@@ -226,15 +211,12 @@ class MainActivity : Activity() {
                 }
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) }
             })
-            // arrow
             addView(tv("→", 12f, DIMMER).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) }
             })
-            // action
             addView(tv(action, 12f, DIM))
         }
 
-    /** Thin divider. */
     private fun divider(): View = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
             setMargins(0, dp(8), 0, dp(8))
@@ -242,9 +224,6 @@ class MainActivity : Activity() {
         setBackgroundColor(Color.parseColor("#1AFFFFFF"))
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // onCreate
-    // ═══════════════════════════════════════════════════════════════════════════
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -262,20 +241,20 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(24), dp(16), dp(24), dp(20))
-            // Gradient banner background
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.parseColor("#1A7C5CFC"), Color.parseColor("#0A4F8EF7"), Color.TRANSPARENT)
-            ).apply { cornerRadius = 0f }
+            )
             addView(tv("🏝️", 40f, gravity = Gravity.CENTER))
             addView(tv("Lizmo", 32f, WHITE, bold = true, gravity = Gravity.CENTER).apply {
                 setPadding(0, dp(4), 0, 0)
             })
-            addView(tv("Dynamic Island Music Overlay", 13f, DIMMER, gravity = Gravity.CENTER).apply {
+            addView(tv("Dynamic Island Music & Voice Assistant", 13f, DIMMER, gravity = Gravity.CENTER).apply {
                 setPadding(0, dp(4), 0, dp(12))
             })
-            // version badge
-            addView(chip("  v0.7.0  ●  Always-On Voice", Color.parseColor("#22FFFFFF"), DIM).apply {
+            val keyPresent = Prefs.picoKey(this@MainActivity).isNotBlank()
+            val engineBadge = if (keyPresent) "  Porcupine On-Device Wake Word  ●  Active" else "  SpeechRecognizer Fallback Mode"
+            addView(chip(engineBadge, Color.parseColor("#22FFFFFF"), if (keyPresent) GREEN else GOLD).apply {
                 gravity = Gravity.CENTER
             })
         })
@@ -295,7 +274,6 @@ class MainActivity : Activity() {
             addView(sectionHeader("🔧", "3 Permissions Required"))
             addView(divider())
 
-            // Row helper: permission row
             fun permRow(icon: String, label: String, chipRef: (TextView) -> Unit, onClick: () -> Unit): LinearLayout =
                 LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -311,20 +289,20 @@ class MainActivity : Activity() {
                     addView(c)
                 }
 
-            addView(permRow("🔔", "Notification Access", { s1Chip = it; s1 = it }) {
+            addView(permRow("🔔", "Notification Access", { s1Chip = it }) {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             })
             addView(divider())
-            addView(permRow("🪟", "Overlay (Float over apps)", { s2Chip = it; s2 = it }) {
+            addView(permRow("🪟", "Overlay (Float over apps)", { s2Chip = it }) {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             })
             addView(divider())
-            addView(permRow("🎙️", "Microphone (Voice control)", { s3Chip = it; s3 = it }) {
+            addView(permRow("🎙️", "Microphone (Voice control)", { s3Chip = it }) {
                 if (!hasMic()) askMic(7) else Toast.makeText(this@MainActivity, "✅ Microphone already granted", Toast.LENGTH_SHORT).show()
             })
 
             addView(divider())
-            addView(tv("Tap any ⊘ chip to fix it.", 11f, DIMMER).apply { setPadding(0, dp(4), 0, 0) })
+            addView(tv("Tap any ⊘ chip to grant permission.", 11f, DIMMER).apply { setPadding(0, dp(4), 0, 0) })
         }
         root.addView(setupCard, lp(0, 12))
 
@@ -339,193 +317,120 @@ class MainActivity : Activity() {
             addView(divider())
             addView(stepRow("1", "Play any music", "Open Spotify, YouTube Music, JioSaavn, or any player and start a song.", ACCENT))
             addView(stepRow("2", "Island appears automatically", "A floating pill appears at the top of your screen. Tap it to expand.", ACCENT2))
-            addView(stepRow("3", "Say your wake word", "Just say \"lizmo\" (or your custom word). The mic is always listening.", GREEN))
-            addView(stepRow("4", "Speak your command", "After the wake word, say what you want — play, pause, search, volume, etc.", GOLD))
+            addView(stepRow("3", "Say your wake word", "Say \"lizmo\" (or your chosen name). Porcupine wakes up on-device instantly.", GREEN))
+            addView(stepRow("4", "Speak your command", "Pause, skip, play song, volume up/down, repeat, or ask what's playing.", GOLD))
             addView(divider())
-            addView(tv("💡  Tip: You can also long-press the island pill to speak without the wake word.", 11f, DIMMER).apply {
+            addView(tv("💡  Tip: You can also tap the mic in the 'Quick Actions' below or use the Quick Settings tile.", 11f, DIMMER).apply {
                 setPadding(0, dp(4), 0, 0)
             })
         }
         root.addView(howCard, lp(0, 12))
 
         // ═══════════════════════════════════════════════════════════════════════
-        // SECTION 3 — ISLAND CONTROLS
+        // SECTION 3 — WAKE WORD & PICOVOICE ENGINE
         // ═══════════════════════════════════════════════════════════════════════
-        root.addView(tv("  Island Controls", 13f, DIMMER, bold = true).apply {
-            setPadding(dp(20), dp(4), 0, dp(8))
-        })
-        val islandCard = card {
-            addView(sectionHeader("🏝️", "Island Settings"))
-            addView(divider())
-
-            // Show/hide island switch
-            val islandSw = Switch(this@MainActivity).apply {
-                text = "Show floating island"
-                setTextColor(WHITE)
-                textSize = 14f
-                isChecked = Prefs.enabled(this@MainActivity)
-                setOnCheckedChangeListener { _, on ->
-                    Prefs.setEnabled(this@MainActivity, on)
-                    MediaListener.instance?.applyPrefs()
-                }
-            }
-            addView(islandSw)
-            addView(tv("The island floats over all apps and shows the track playing.", 11f, DIMMER).apply { setPadding(dp(4), dp(2), 0, dp(10)) })
-
-            addView(divider())
-
-            // Theme picker
-            val themeRow = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(6), 0, dp(6))
-            }
-            val themeLbl = tv("Theme:", 13f, WHITE)
-            themeRow.addView(themeLbl)
-            themeRow.addView(View(this@MainActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-            })
-            val themeChip = chip(Prefs.theme(this@MainActivity).name.lowercase(), ACCENT)
-            themeChip.setOnClickListener {
-                Prefs.setTheme(this@MainActivity, Prefs.theme(this@MainActivity).next())
-                themeChip.text = Prefs.theme(this@MainActivity).name.lowercase()
-                MediaListener.instance?.applyPrefs()
-            }
-            themeRow.addView(themeChip)
-            addView(themeRow)
-            addView(tv("Glass · Neon · Minimal · Sunset · Mono — tap chip to cycle.", 11f, DIMMER).apply { setPadding(0, dp(2), 0, dp(6)) })
-
-            addView(divider())
-
-            // Lyrics mode
-            val lyricRow = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(6), 0, dp(6))
-            }
-            lyricRow.addView(tv("Lyrics language:", 13f, WHITE))
-            lyricRow.addView(View(this@MainActivity).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
-            val lyricChip = chip(if (Prefs.lyricMode(this@MainActivity) == "en") "English" else "Original", ACCENT2)
-            lyricChip.setOnClickListener {
-                val next = if (Prefs.lyricMode(this@MainActivity) == "en") "orig" else "en"
-                Prefs.setLyricMode(this@MainActivity, next)
-                lyricChip.text = if (next == "en") "English" else "Original"
-                MediaListener.instance?.applyPrefs()
-            }
-            lyricRow.addView(lyricChip)
-            addView(lyricRow)
-            addView(tv("Tap EN/ORIG chip on the island too. Long-press to set the song's language.", 11f, DIMMER).apply { setPadding(0, dp(2), 0, dp(6)) })
-        }
-        root.addView(islandCard, lp(0, 12))
-
-        // ═══════════════════════════════════════════════════════════════════════
-        // SECTION 4 — VOICE COMMANDS CHEAT-SHEET
-        // ═══════════════════════════════════════════════════════════════════════
-        root.addView(tv("  Voice Commands", 13f, DIMMER, bold = true).apply {
-            setPadding(dp(20), dp(4), 0, dp(8))
-        })
-        val cmdCard = card(GREEN) {
-            addView(sectionHeader("🎤", "Say any of these after your wake word"))
-            addView(divider())
-            // Playback
-            addView(tv("⏯  Playback", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo pause", "Pauses music"))
-            addView(commandRow("lizmo play", "Resumes music"))
-            addView(commandRow("lizmo next", "Skip to next track"))
-            addView(commandRow("lizmo previous", "Go back to last track"))
-            addView(commandRow("lizmo restart", "Play from beginning"))
-            addView(commandRow("lizmo stop", "Stop playback"))
-            addView(divider())
-            // Search
-            addView(tv("🔍  Search & Play", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo play Kesariya", "Searches & plays in your active app"))
-            addView(commandRow("lizmo play Blinding Lights", "Works with artist name too"))
-            addView(divider())
-            // Volume
-            addView(tv("🔊  Volume", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo volume up", "Increase volume"))
-            addView(commandRow("lizmo volume 60", "Set exact volume (0–100)"))
-            addView(commandRow("lizmo mute", "Mute / unmute"))
-            addView(divider())
-            // Shuffle & Repeat
-            addView(tv("🔀  Shuffle & Repeat", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo shuffle", "Toggle shuffle on/off"))
-            addView(commandRow("lizmo repeat one", "Repeat this song"))
-            addView(commandRow("lizmo repeat all", "Repeat whole playlist"))
-            addView(divider())
-            // Seeking
-            addView(tv("⏩  Seek", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo skip forward 30 seconds", "Jump ahead 30 s"))
-            addView(commandRow("lizmo rewind 15 seconds", "Jump back 15 s"))
-            addView(commandRow("lizmo jump to 2 minutes", "Go to exact timestamp"))
-            addView(divider())
-            // Info
-            addView(tv("ℹ️  Info", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
-            addView(commandRow("lizmo what's playing", "Read out current track & artist"))
-            addView(commandRow("lizmo like this", "❤ Like / save song"))
-            addView(commandRow("lizmo what's the volume", "Tell me current volume %"))
-        }
-        root.addView(cmdCard, lp(0, 12))
-
-        // ═══════════════════════════════════════════════════════════════════════
-        // SECTION 5 — WAKE WORD SETUP
-        // ═══════════════════════════════════════════════════════════════════════
-        root.addView(tv("  Wake Word", 13f, DIMMER, bold = true).apply {
+        root.addView(tv("  Wake Word Engine", 13f, DIMMER, bold = true).apply {
             setPadding(dp(20), dp(4), 0, dp(8))
         })
         val wakeCard = card(ACCENT) {
-            addView(sectionHeader("💬", "Customize Your Trigger Word"))
+            addView(sectionHeader("⚡", "Picovoice Porcupine (On-Device)"))
             addView(divider())
-            addView(tv("The microphone is always listening for this word. Say it, then your command.", 13f, DIM).apply {
-                setPadding(0, dp(2), 0, dp(10))
+            addView(tv("Porcupine runs 100% locally on raw PCM frames without audio transcription, beeps, or cloud network latency.", 13f, DIM).apply {
+                setPadding(0, dp(2), 0, dp(8))
             })
 
-            // recommendation box
-            addView(LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1A7C5CFC"))
-                    cornerRadius = dp(10).toFloat()
-                    setStroke(dp(1), Color.parseColor("#337C5CFC"))
-                }
-                addView(tv("✨  Recommended", 11f, Color.parseColor("#A78BFA"), bold = true))
-                addView(tv("Keep \"lizmo\" or change to a short, unique word (3+ letters). Add comma-separated alternatives for how your phone mishears it.\n\nExample:  jarvis, jarves, jarvis", 12f, DIMMER).apply { setPadding(0, dp(4), 0, 0) })
-            })
-
-            addView(tv("\nYour wake word(s):", 13f, WHITE, bold = true))
-            val wakeInput = EditText(this@MainActivity).apply {
-                setText(Prefs.wake(this@MainActivity))
-                hint = "lizmo, lismo, limo"
+            // Picovoice AccessKey input
+            addView(tv("Picovoice AccessKey (Free):", 13f, WHITE, bold = true))
+            val keyInput = EditText(this@MainActivity).apply {
+                setText(Prefs.picoKey(this@MainActivity))
+                hint = "Paste your free key from console.picovoice.ai"
                 setTextColor(WHITE)
-                textSize = 15f
+                textSize = 14f
                 setHintTextColor(Color.parseColor("#55FFFFFF"))
                 inputType = InputType.TYPE_CLASS_TEXT
-                setPadding(dp(14), dp(12), dp(14), dp(12))
-                setBackgroundColor(Color.TRANSPARENT)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
                 background = GradientDrawable().apply {
                     setColor(Color.parseColor("#0DFFFFFF"))
                     cornerRadius = dp(10).toFloat()
                     setStroke(dp(1), Color.parseColor("#33FFFFFF"))
                 }
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = dp(6); bottomMargin = dp(10) }
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(6); bottomMargin = dp(8) }
             }
-            addView(wakeInput)
+            addView(keyInput)
 
-            addView(primaryBtn("💾  Save Wake Word") {
-                val list = wakeInput.text.toString().split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-                if (list.isEmpty() || list.any { it.length < 3 }) {
-                    Toast.makeText(this@MainActivity, "Each name needs at least 3 letters", Toast.LENGTH_SHORT).show()
-                } else {
-                    Prefs.setWake(this@MainActivity, list.joinToString(", "))
-                    Toast.makeText(this@MainActivity, "✅ Saved: " + list.joinToString(", "), Toast.LENGTH_SHORT).show()
+            addView(primaryBtn("💾  Save AccessKey") {
+                val key = keyInput.text.toString().trim()
+                Prefs.setPicoKey(this@MainActivity, key)
+                Toast.makeText(this@MainActivity, if (key.isNotEmpty()) "✅ Key saved" else "Key cleared (fallback active)", Toast.LENGTH_SHORT).show()
+                if (Prefs.voiceOn(this@MainActivity) && hasMic()) {
+                    VoiceService.stop(this@MainActivity)
+                    h.postDelayed({ VoiceService.start(this@MainActivity) }, 400)
+                }
+            })
+
+            addView(divider())
+
+            // Custom keyword status / built-in selector
+            val ppn = VoiceService.customKeywordFile(this@MainActivity)
+            val hasCustomPpn = ppn.exists()
+            val ppnStatus = if (hasCustomPpn) "Using custom 'wake.ppn' (${Prefs.wake(this@MainActivity).substringBefore(",").trim()})"
+                           else "Using built-in word: ${Prefs.builtin(this@MainActivity)}"
+            addView(tv(ppnStatus, 12f, if (hasCustomPpn) GREEN else Color.parseColor("#C4B5FD"), bold = true).apply {
+                setPadding(0, dp(4), 0, dp(4))
+            })
+
+            if (!hasCustomPpn) {
+                val builtinRow = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(4), 0, dp(6))
+                }
+                builtinRow.addView(tv("Built-in trigger word:", 13f, WHITE).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                val builtinChip = chip(Prefs.builtin(this@MainActivity), ACCENT2)
+                builtinChip.setOnClickListener {
+                    val next = builtins[(builtins.indexOf(Prefs.builtin(this@MainActivity)) + 1) % builtins.size]
+                    Prefs.setBuiltin(this@MainActivity, next)
+                    builtinChip.text = next
                     if (Prefs.voiceOn(this@MainActivity) && hasMic()) {
                         VoiceService.stop(this@MainActivity)
-                        h.postDelayed({ VoiceService.start(this@MainActivity) }, 300)
+                        h.postDelayed({ VoiceService.start(this@MainActivity) }, 400)
                     }
+                }
+                builtinRow.addView(builtinChip)
+                addView(builtinRow)
+            }
+
+            addView(divider())
+
+            // Fallback wake word aliases
+            addView(tv("Fallback wake word & mishearings (for STT fallback):", 12f, DIMMER))
+            val wakeInput = EditText(this@MainActivity).apply {
+                setText(Prefs.wake(this@MainActivity))
+                hint = "lizmo, lismo, lizma, limo"
+                setTextColor(WHITE)
+                textSize = 14f
+                setHintTextColor(Color.parseColor("#55FFFFFF"))
+                inputType = InputType.TYPE_CLASS_TEXT
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#0DFFFFFF"))
+                    cornerRadius = dp(10).toFloat()
+                    setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(4); bottomMargin = dp(8) }
+            }
+            addView(wakeInput)
+            addView(ghostBtn("Save Fallback Aliases") {
+                val list = wakeInput.text.toString().split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+                if (list.isNotEmpty()) {
+                    Prefs.setWake(this@MainActivity, list.joinToString(", "))
+                    Toast.makeText(this@MainActivity, "✅ Aliases saved", Toast.LENGTH_SHORT).show()
                 }
             })
 
@@ -537,7 +442,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, dp(6), 0, dp(4))
             }
-            langRow.addView(tv("Voice language:", 13f, WHITE).apply {
+            langRow.addView(tv("Voice recognition language:", 13f, WHITE).apply {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
             val langChip = chip(Prefs.voiceLang(this@MainActivity), ACCENT2)
@@ -548,98 +453,191 @@ class MainActivity : Activity() {
             }
             langRow.addView(langChip)
             addView(langRow)
-            addView(tv("en-IN = Indian English  •  en-US = American  •  en-GB = British  •  hi-IN = Hindi", 11f, DIMMER).apply {
-                setPadding(0, dp(2), 0, 0)
-            })
+            addView(tv("en-IN = Indian English  •  en-US = American  •  en-GB = British  •  hi-IN = Hindi", 11f, DIMMER))
         }
         root.addView(wakeCard, lp(0, 12))
 
         // ═══════════════════════════════════════════════════════════════════════
-        // SECTION 6 — MICROPHONE SENSITIVITY + LIVE TEST
+        // SECTION 4 — SPEAKER VERIFICATION & ENROLLMENT (EAGLE)
         // ═══════════════════════════════════════════════════════════════════════
-        root.addView(tv("  Microphone", 13f, DIMMER, bold = true).apply {
+        root.addView(tv("  Speaker Recognition", 13f, DIMMER, bold = true).apply {
+            setPadding(dp(20), dp(4), 0, dp(8))
+        })
+        val enrollCard = card(Color.parseColor("#EC4899")) {
+            addView(sectionHeader("👤", "Voice Lock (Only Your Voice)"))
+            addView(divider())
+            addView(tv("Train Lizmo on your voice with 3 different sentences. Once enrolled, Lizmo verifies your voiceprint before executing commands.", 13f, DIM).apply {
+                setPadding(0, dp(2), 0, dp(10))
+            })
+
+            enrollStatusTv = tv("Checking voice profile…", 13f, WHITE, bold = true).apply {
+                setPadding(0, 0, 0, dp(8))
+            }
+            addView(enrollStatusTv)
+
+            // Switch to enable/disable lock
+            voiceLockSw = Switch(this@MainActivity).apply {
+                text = "Only respond to enrolled voice"
+                setTextColor(WHITE)
+                textSize = 13f
+                isChecked = Prefs.lock(this@MainActivity)
+                setOnCheckedChangeListener { _, on ->
+                    val profileExists = VoiceService.voiceProfileFile(this@MainActivity).exists()
+                    if (on && !profileExists) {
+                        Toast.makeText(this@MainActivity, "Enroll your voice first!", Toast.LENGTH_SHORT).show()
+                        isChecked = false
+                    } else {
+                        Prefs.setLock(this@MainActivity, on)
+                        if (VoiceService.running) {
+                            VoiceService.stop(this@MainActivity)
+                            h.postDelayed({ VoiceService.start(this@MainActivity) }, 300)
+                        }
+                    }
+                }
+            }
+            addView(voiceLockSw)
+
+            addView(divider())
+
+            // Strictness selector
+            addView(tv("Verification Strictness:", 13f, WHITE, bold = true))
+            val strictRow = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setPadding(0, dp(6), 0, dp(10))
+            }
+            val strictLevels = listOf("Relaxed (0.30)", "Balanced (0.45)", "Strict (0.60)")
+            val strictButtons = ArrayList<TextView>()
+            strictLevels.forEachIndexed { idx, name ->
+                val cur = Prefs.lockLevel(this@MainActivity)
+                val sel = (cur == idx)
+                val b = TextView(this@MainActivity).apply {
+                    text = name
+                    textSize = 11f
+                    gravity = Gravity.CENTER
+                    setTextColor(if (sel) WHITE else DIM)
+                    setTypeface(typeface, if (sel) Typeface.BOLD else Typeface.NORMAL)
+                    setPadding(dp(8), dp(8), dp(8), dp(8))
+                    background = GradientDrawable().apply {
+                        setColor(if (sel) Color.parseColor("#33EC4899") else Color.parseColor("#0DFFFFFF"))
+                        cornerRadius = dp(8).toFloat()
+                        setStroke(dp(1), if (sel) Color.parseColor("#EC4899") else Color.parseColor("#22FFFFFF"))
+                    }
+                    setOnClickListener {
+                        Prefs.setLockLevel(this@MainActivity, idx)
+                        strictButtons.forEachIndexed { i, btn ->
+                            val isChosen = (i == idx)
+                            btn.setTextColor(if (isChosen) WHITE else DIM)
+                            (btn.background as? GradientDrawable)?.apply {
+                                setColor(if (isChosen) Color.parseColor("#33EC4899") else Color.parseColor("#0DFFFFFF"))
+                                setStroke(dp(1), if (isChosen) Color.parseColor("#EC4899") else Color.parseColor("#22FFFFFF"))
+                            }
+                        }
+                    }
+                }
+                strictButtons.add(b)
+                strictRow.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
+                })
+            }
+            addView(strictRow)
+
+            addView(primaryBtn("🎙️  Teach Lizmo Your Voice", Color.parseColor("#EC4899")) {
+                startActivity(Intent(this@MainActivity, EnrollActivity::class.java))
+            })
+
+            deleteVoiceBtn = ghostBtn("🗑️  Delete Enrolled Voice") {
+                val f = VoiceService.voiceProfileFile(this@MainActivity)
+                if (f.exists()) f.delete()
+                Prefs.setLock(this@MainActivity, false)
+                voiceLockSw.isChecked = false
+                refreshEnrollStatus()
+                Toast.makeText(this@MainActivity, "Voice profile deleted", Toast.LENGTH_SHORT).show()
+            }
+            addView(deleteVoiceBtn.apply {
+                (layoutParams as? LinearLayout.LayoutParams)?.topMargin = dp(8)
+            })
+        }
+        root.addView(enrollCard, lp(0, 12))
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // SECTION 5 — MICROPHONE PRIVACY & LIVE DIAGNOSTICS
+        // ═══════════════════════════════════════════════════════════════════════
+        root.addView(tv("  Microphone & Privacy", 13f, DIMMER, bold = true).apply {
             setPadding(dp(20), dp(4), 0, dp(8))
         })
         val micCard = card(GOLD) {
-            addView(sectionHeader("🎙️", "Sensitivity & Live Test"))
+            addView(sectionHeader("🎙️", "Privacy Mode & Diagnostics"))
             addView(divider())
 
-            // Sensitivity picker
-            addView(tv("How loud do you need to speak?", 13f, WHITE, bold = true))
-            addView(tv("Pick based on your environment:", 12f, DIMMER).apply { setPadding(0, dp(2), 0, dp(8)) })
-
-            // 3-option visual sensitivity picker
-            val sensRow = LinearLayout(this@MainActivity).apply {
+            // Mic Mode Selector: Always vs Music Only
+            addView(tv("Microphone Active Window:", 13f, WHITE, bold = true))
+            val modeRow = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = dp(10) }
+                setPadding(0, dp(6), 0, dp(8))
             }
-            fun makeSensChip(sens: MicSensitivity): LinearLayout =
-                LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    val isSelected = Prefs.micSensitivity(this@MainActivity) == sens
-                    setPadding(dp(10), dp(10), dp(10), dp(10))
+            val isMusicOnly = Prefs.micMode(this@MainActivity) == "music"
+
+            val btnAlways = TextView(this@MainActivity).apply {
+                text = "Always Listening"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+            val btnMusic = TextView(this@MainActivity).apply {
+                text = "Only While Music Plays"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+
+            fun updateModeButtons(musicOnly: Boolean) {
+                btnAlways.apply {
+                    setTextColor(if (!musicOnly) GOLD else DIM)
                     background = GradientDrawable().apply {
-                        setColor(if (isSelected) Color.parseColor("#33F59E0B") else Color.parseColor("#0DFFFFFF"))
-                        cornerRadius = dp(12).toFloat()
-                        setStroke(dp(if (isSelected) 2 else 1), if (isSelected) GOLD else Color.parseColor("#22FFFFFF"))
+                        setColor(if (!musicOnly) Color.parseColor("#33F59E0B") else Color.parseColor("#0DFFFFFF"))
+                        cornerRadius = dp(10).toFloat()
+                        setStroke(dp(1), if (!musicOnly) GOLD else Color.parseColor("#22FFFFFF"))
                     }
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                        setMargins(dp(3), 0, dp(3), 0)
-                    }
-                    val icon = when(sens) {
-                        MicSensitivity.LOW -> "🤫"; MicSensitivity.MEDIUM -> "🗣️"; MicSensitivity.HIGH -> "📢"
-                    }
-                    val name = when(sens) {
-                        MicSensitivity.LOW -> "Low"; MicSensitivity.MEDIUM -> "Medium"; MicSensitivity.HIGH -> "High"
-                    }
-                    val desc = when(sens) {
-                        MicSensitivity.LOW -> "Quiet\nroom"; MicSensitivity.MEDIUM -> "Normal\nspeech"; MicSensitivity.HIGH -> "Noisy\nroom"
-                    }
-                    addView(tv(icon, 22f, gravity = Gravity.CENTER))
-                    addView(tv(name, 12f, if (isSelected) GOLD else WHITE, bold = true, gravity = Gravity.CENTER))
-                    addView(tv(desc, 10f, DIMMER, gravity = Gravity.CENTER))
-                    tag = sens
                 }
-
-            val sensChips = MicSensitivity.values().map { makeSensChip(it) }
-
-            fun refreshSensChips() {
-                val cur = Prefs.micSensitivity(this@MainActivity)
-                sensChips.forEachIndexed { _, chip ->
-                    val sens = chip.tag as MicSensitivity
-                    val sel = sens == cur
-                    (chip.background as? GradientDrawable)?.apply {
-                        setColor(if (sel) Color.parseColor("#33F59E0B") else Color.parseColor("#0DFFFFFF"))
-                        setStroke(dp(if (sel) 2 else 1), if (sel) GOLD else Color.parseColor("#22FFFFFF"))
+                btnMusic.apply {
+                    setTextColor(if (musicOnly) GOLD else DIM)
+                    background = GradientDrawable().apply {
+                        setColor(if (musicOnly) Color.parseColor("#33F59E0B") else Color.parseColor("#0DFFFFFF"))
+                        cornerRadius = dp(10).toFloat()
+                        setStroke(dp(1), if (musicOnly) GOLD else Color.parseColor("#22FFFFFF"))
                     }
-                    (chip.getChildAt(1) as? TextView)?.setTextColor(if (sel) GOLD else WHITE)
                 }
             }
+            updateModeButtons(isMusicOnly)
 
-            sensChips.forEach { c ->
-                c.setOnClickListener {
-                    val sens = c.tag as MicSensitivity
-                    Prefs.setMicSensitivity(this@MainActivity, sens)
-                    refreshSensChips()
-                    Toast.makeText(this@MainActivity, "Sensitivity: ${sens.label}", Toast.LENGTH_SHORT).show()
-                }
-                sensRow.addView(c)
+            btnAlways.setOnClickListener {
+                Prefs.setMicMode(this@MainActivity, "always")
+                updateModeButtons(false)
+                Toast.makeText(this@MainActivity, "Mic is always active for wake word", Toast.LENGTH_SHORT).show()
             }
-            addView(sensRow)
+            btnMusic.setOnClickListener {
+                Prefs.setMicMode(this@MainActivity, "music")
+                updateModeButtons(true)
+                Toast.makeText(this@MainActivity, "Mic pauses when music stops (hides green dot)", Toast.LENGTH_SHORT).show()
+            }
+
+            modeRow.addView(btnAlways, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(4) })
+            modeRow.addView(btnMusic, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(4) })
+            addView(modeRow)
+            addView(tv("Tip: 'Only While Music Plays' releases the microphone as soon as music stops, removing Android's green privacy indicator.", 11f, DIMMER).apply {
+                setPadding(0, dp(2), 0, dp(10))
+            })
 
             addView(divider())
 
             // Always-on voice switch
             voiceSw = Switch(this@MainActivity).apply {
-                text = "Always-on wake word (recommended ON)"
+                text = "Voice Assistant Master Switch"
                 setTextColor(WHITE)
                 textSize = 13f
                 isChecked = Prefs.voiceOn(this@MainActivity)
-                setPadding(0, dp(4), 0, dp(4))
                 setOnCheckedChangeListener { _, on ->
                     if (syncing) return@setOnCheckedChangeListener
                     if (on) {
@@ -652,19 +650,18 @@ class MainActivity : Activity() {
                 }
             }
             addView(voiceSw)
-            addView(tv("Voice is ON by default. Turn off only if you want to save battery.", 11f, DIMMER).apply { setPadding(dp(4), dp(2), 0, dp(8)) })
 
             addView(divider())
 
-            // VU meter
-            addView(tv("Live mic level:", 12f, DIM, bold = true).apply { setPadding(0, dp(6), 0, dp(4)) })
+            // Live VU meter
+            addView(tv("Live Microphone Audio Level:", 12f, DIM, bold = true).apply { setPadding(0, dp(6), 0, dp(4)) })
             vuContainer = FrameLayout(this@MainActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(22)).apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(20)).apply {
                     setMargins(0, 0, 0, dp(6))
                 }
                 background = GradientDrawable().apply {
                     setColor(Color.parseColor("#1AFFFFFF"))
-                    cornerRadius = dp(11).toFloat()
+                    cornerRadius = dp(10).toFloat()
                 }
             }
             vuBar = FrameLayout(this@MainActivity).apply {
@@ -673,27 +670,63 @@ class MainActivity : Activity() {
                 }
                 background = GradientDrawable().apply {
                     setColor(GREEN)
-                    cornerRadius = dp(11).toFloat()
+                    cornerRadius = dp(10).toFloat()
                 }
             }
             vuContainer.addView(vuBar)
             addView(vuContainer)
 
-            // Status text
+            // Diagnostic status line
             voiceStatus = tv(VoiceBus.lastLog, 12f, DIMMER).apply { setPadding(0, dp(2), 0, dp(10)) }
             addView(voiceStatus)
 
-            addView(primaryBtn("🧪  Test Microphone — say \"lizmo pause\"", GOLD) { testMic() })
-            addView(tv("Tests wake word recognition. Shows what your phone heard and whether it matched.", 11f, DIMMER).apply {
+            addView(primaryBtn("🧪  Test Microphone Recognition", GOLD) { testMic() })
+            addView(tv("Shows exactly what the recognizer hears and validates wake word / control match.", 11f, DIMMER).apply {
                 setPadding(0, dp(6), 0, 0)
             })
 
             addView(divider())
-            addView(ghostBtn("🔋  Battery settings (disable battery optimization)") {
+            addView(ghostBtn("🔋  Disable Battery Optimization (Keeps Voice Running)") {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             })
         }
         root.addView(micCard, lp(0, 12))
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // SECTION 6 — VOICE COMMANDS CHEAT-SHEET
+        // ═══════════════════════════════════════════════════════════════════════
+        root.addView(tv("  Voice Commands Reference", 13f, DIMMER, bold = true).apply {
+            setPadding(dp(20), dp(4), 0, dp(8))
+        })
+        val cmdCard = card(GREEN) {
+            addView(sectionHeader("🎤", "Natural Commands Recognized"))
+            addView(divider())
+            addView(tv("⏯  Playback", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
+            addView(commandRow("pause", "Pauses active player"))
+            addView(commandRow("resume / play", "Resumes music"))
+            addView(commandRow("next / skip this song", "Next track"))
+            addView(commandRow("go back / previous", "Previous track"))
+            addView(commandRow("restart / play from start", "Replays from beginning"))
+            addView(divider())
+            addView(tv("🔊  Volume", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
+            addView(commandRow("turn the volume down a bit", "Decreases volume"))
+            addView(commandRow("make it louder", "Increases volume"))
+            addView(commandRow("volume to sixty percent", "Sets exact volume (digits/words)"))
+            addView(commandRow("mute / unmute", "Mutes or restores volume"))
+            addView(divider())
+            addView(tv("🔍  Search & Play", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
+            addView(commandRow("play Kesariya", "Plays in Spotify/YT Music automatically"))
+            addView(commandRow("play Blinding Lights by The Weeknd", "Searches song + artist"))
+            addView(divider())
+            addView(tv("🔀  Shuffle & Repeat", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
+            addView(commandRow("shuffle / mix it up", "Enables shuffle"))
+            addView(commandRow("repeat this song / loop one", "Repeats current song"))
+            addView(divider())
+            addView(tv("ℹ️  Info", 12f, DIMMER, bold = true).apply { setPadding(0, dp(4), 0, dp(2)) })
+            addView(commandRow("what's playing", "Reads title and artist"))
+            addView(commandRow("what's the volume", "Reports current volume %"))
+        }
+        root.addView(cmdCard, lp(0, 12))
 
         // ═══════════════════════════════════════════════════════════════════════
         // SECTION 7 — ACTIVE MUSIC PLATFORM
@@ -704,11 +737,11 @@ class MainActivity : Activity() {
         val platformCard = card(ACCENT2) {
             addView(sectionHeader("🎵", "Active Player Detection"))
             addView(divider())
-            addView(tv("Lizmo auto-detects which music app you're using. When you say \"lizmo play [song]\", it opens the song directly in that app without showing a chooser dialog.", 13f, DIM).apply {
+            addView(tv("Lizmo detects which music app is active. When you say \"play [song]\", it commands that app directly without chooser prompts.", 13f, DIM).apply {
                 setPadding(0, dp(2), 0, dp(10))
             })
 
-            platformTv = tv("Not detected yet — start playing music first.", 13f, DIMMER).apply {
+            platformTv = tv("Not detected yet — start music playback first.", 13f, DIMMER).apply {
                 setPadding(0, 0, 0, dp(10))
             }
             addView(platformTv)
@@ -719,15 +752,10 @@ class MainActivity : Activity() {
                 platformTv.text = if (pkg != null) {
                     val name = try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }
                                catch (e: Exception) { pkg }
-                    "● Active: $name\n\"lizmo play [song]\" will play directly in $name."
+                    "● Active: $name\nVoice commands will control $name seamlessly."
                 } else {
-                    "⚠ No active session — open a music app and play something first."
+                    "⚠ No active media session — open your music app and start playing first."
                 }
-            })
-
-            addView(divider())
-            addView(tv("Supported: Spotify · YouTube Music · Apple Music · JioSaavn · SoundCloud · Gaana · Wynk · Poweramp · VLC · Retro Music", 11f, DIMMER).apply {
-                setPadding(0, dp(4), 0, 0)
             })
         }
         root.addView(platformCard, lp(0, 12))
@@ -741,7 +769,7 @@ class MainActivity : Activity() {
         root.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(16), 0, dp(16), 0)
-            addView(primaryBtn("🔍  Search Music", ACCENT) {
+            addView(primaryBtn("🔍  Search Song", ACCENT) {
                 startActivity(Intent(this@MainActivity, SearchActivity::class.java))
             }.apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) } })
             addView(primaryBtn("🎤  Voice Search", ACCENT2) {
@@ -749,54 +777,28 @@ class MainActivity : Activity() {
             }.apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) } })
         })
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // SECTION 9 — TIPS & TROUBLESHOOTING
-        // ═══════════════════════════════════════════════════════════════════════
-        root.addView(tv("  Tips & Troubleshooting", 13f, DIMMER, bold = true).apply {
-            setPadding(dp(20), dp(16), 0, dp(8))
-        })
-        val tipCard = card {
-            addView(sectionHeader("💡", "Common Issues & Fixes"))
-            addView(divider())
-
-            fun tipRow(icon: String, title: String, body: String) {
-                addView(LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(0, dp(6), 0, dp(6))
-                    addView(tv("$icon  $title", 13f, WHITE, bold = true))
-                    addView(tv(body, 12f, DIMMER).apply { setPadding(dp(24), dp(2), 0, 0) })
-                })
-                addView(divider())
-            }
-
-            tipRow("🏝️", "Island doesn't appear",
-                "Enable Notification Access + Overlay permission. For Xiaomi/Samsung/OnePlus, also disable battery optimization.")
-            tipRow("🎙️", "Wake word not working",
-                "Say your name clearly. Check the mic test above to see what the phone hears. Add alternate spellings (e.g. \"lizmo, lismo, lismo\").")
-            tipRow("🎵", "Song search opens a dialog / wrong app",
-                "Tap 'Detect Active Platform' above after starting music. The last active app will be used automatically.")
-            tipRow("🔒", "Notification access greyed out (Android 13+)",
-                "Settings → Apps → Lizmo → ⋮ menu → Allow restricted settings → re-enable notification access.")
-            tipRow("🔋", "Mic stops after a few minutes",
-                "Tap 'Battery settings' above and disable battery optimization for Lizmo. Also enable Autostart if your phone has it.")
-            addView(tv("Version 0.7.0  •  Open source on GitHub", 11f, DIMMER, gravity = Gravity.CENTER).apply {
-                setPadding(0, dp(4), 0, 0)
-            })
-        }
-        root.addView(tipCard, lp(0, 24))
-
         setContentView(scroll)
 
-        // ── First-launch: auto-request mic ────────────────────────────────────
+        // First launch auto-request
         if (Prefs.isFirstLaunch(this)) {
             Prefs.setFirstLaunchDone(this)
             if (!hasMic()) askMic(7) else { if (!VoiceService.running) enableVoice() }
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Permission helpers
-    // ═══════════════════════════════════════════════════════════════════════════
+    private fun refreshEnrollStatus() {
+        val enrolled = VoiceService.voiceProfileFile(this).exists()
+        val locked = Prefs.lock(this)
+        enrollStatusTv.text = when {
+            enrolled && locked -> "✅ Enrolled & Active (Lizmo only responds to you)"
+            enrolled           -> "✓ Enrolled (Lock toggle is currently OFF)"
+            else               -> "○ Not enrolled yet (responds to any voice)"
+        }
+        enrollStatusTv.setTextColor(if (enrolled) GREEN else Color.parseColor("#E0E0E0"))
+        deleteVoiceBtn.visibility = if (enrolled) View.VISIBLE else View.GONE
+        voiceLockSw.isChecked = locked
+    }
+
     private fun askMic(code: Int) {
         val perms = if (Build.VERSION.SDK_INT >= 33)
             arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
@@ -812,10 +814,6 @@ class MainActivity : Activity() {
         } else {
             if (requestCode == 7) { syncing = true; voiceSw.isChecked = false; syncing = false }
             voiceStatus.text = "Microphone permission denied."
-            if (!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-                Toast.makeText(this, "Enable Microphone for Lizmo in app Permissions", Toast.LENGTH_LONG).show()
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-            }
         }
         updatePermChips()
     }
@@ -825,31 +823,28 @@ class MainActivity : Activity() {
         VoiceService.start(this)
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Mic test
-    // ═══════════════════════════════════════════════════════════════════════════
     private fun testMic() {
         if (!hasMic()) { askMic(8); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            voiceStatus.text = "No speech recognizer. Install/enable the Google app."
+            voiceStatus.text = "No speech recognizer found on device."
             return
         }
+
         VoiceService.stop(this)
-        voiceStatus.text = "Test: speak now…"
+        voiceStatus.text = "🧪 Speak a wake word or command now (e.g. \"lizmo next\" or \"turn it down\")…"
         updateVu(-10f)
+
         try {
             testRec?.destroy()
             val r = SpeechRecognizer.createSpeechRecognizer(this)
             testRec = r
             r.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(p: Bundle?) { voiceStatus.text = "🎙 Listening…" }
+                override fun onReadyForSpeech(p: Bundle?) { voiceStatus.text = "🎙 Microphone open — speak now…" }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {
                     updateVu(rmsdB)
-                    val sens = Prefs.micSensitivity(this@MainActivity)
-                    val gate = if (rmsdB >= sens.rmsThresholdDb) "ACTIVE ✓" else "too quiet"
                     runOnUiThread {
-                        voiceStatus.text = "Level: %.1f dB  |  [${sens.label.substringBefore(" (")}]: $gate".format(rmsdB)
+                        voiceStatus.text = "Mic Level: %.1f dB".format(rmsdB)
                     }
                 }
                 override fun onBufferReceived(b: ByteArray?) {}
@@ -866,12 +861,23 @@ class MainActivity : Activity() {
                 }
                 override fun onResults(results: Bundle?) {
                     val said = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                    val isCtrl = VoiceCommands.isControl(said)
                     val rest = WakeWord.extract(said, Prefs.wake(this@MainActivity))
-                    voiceStatus.text = "Heard: \"$said\"\n" + when {
-                        rest == null  -> "❌ Wake word not found. Add how it was heard to your wake word list above."
-                        rest.isBlank() -> "✅ Wake word detected! (no command after it)"
-                        else          -> "✅ Wake word + command: \"$rest\""
+                    val keyActive = Prefs.picoKey(this@MainActivity).isNotBlank()
+
+                    val report = StringBuilder()
+                    report.append("Heard: \"$said\"\n")
+                    if (isCtrl) {
+                        report.append("✅ Recognized as Media Control: \"${VoiceCommands.normalize(said)}\"\n")
+                    } else if (rest != null) {
+                        report.append("✅ Wake Word detected in transcript! (Command: \"$rest\")\n")
+                    } else {
+                        report.append("ℹ No control or wake word matched in transcript.\n")
                     }
+                    report.append(if (keyActive) "⚡ Porcupine key configured (uses acoustic wake word)"
+                                  else "ℹ No Picovoice key (uses STT wake word)")
+
+                    voiceStatus.text = report.toString()
                     updateVu(-10f)
                     resumeVoiceIfOn()
                 }
@@ -894,9 +900,6 @@ class MainActivity : Activity() {
         if (Prefs.voiceOn(this) && hasMic()) VoiceService.start(this)
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // VU meter
-    // ═══════════════════════════════════════════════════════════════════════════
     private fun updateVu(rmsdB: Float) {
         runOnUiThread {
             val pct = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
@@ -915,9 +918,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Permission chip refresh
-    // ═══════════════════════════════════════════════════════════════════════════
     private fun updatePermChips() {
         val n = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
             ?.contains(packageName) == true
@@ -938,12 +938,10 @@ class MainActivity : Activity() {
         setChip(s3Chip, m, "Granted")
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Lifecycle
-    // ═══════════════════════════════════════════════════════════════════════════
     override fun onResume() {
         super.onResume()
         updatePermChips()
+        refreshEnrollStatus()
         MediaListener.instance?.applyPrefs()
         syncing = true
         voiceSw.isChecked = Prefs.voiceOn(this)

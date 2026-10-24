@@ -6,25 +6,20 @@ import android.widget.Toast
 import kotlin.math.roundToInt
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VoiceBus — the bridge between VoiceService and every UI element
+// VoiceBus — the bridge between VoiceService, VoiceHud, and the Island
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Where voice feedback goes: flashes on the island when it's showing, otherwise a toast. */
 object VoiceBus {
     @Volatile var island: ((String) -> Boolean)? = null
 
-    /** Live mic/debug status shown on the Settings screen. */
+    /** Live mic/debug status shown on Settings screen. */
     @Volatile var lastLog: String = "Voice control is off"
     @Volatile var logListener: ((String) -> Unit)? = null
 
     /** Live RMS dB stream from the microphone (for VU meter display). */
     @Volatile var rmsListener: ((Float) -> Unit)? = null
 
-    /**
-     * Command HUD: called with the action emoji + label whenever a voice command executes.
-     * e.g. "⏭ Next", "🔀 Shuffle on", "🔉 Volume 60%"
-     * The island overlay registers here to show an animated banner; falls back to a toast.
-     */
+    /** Command HUD callback registered by IslandController. */
     @Volatile var commandHud: ((String) -> Unit)? = null
 
     fun log(msg: String) {
@@ -32,198 +27,219 @@ object VoiceBus {
         logListener?.invoke(msg)
     }
 
-    fun say(ctx: Context, msg: String) {
+    fun say(ctx: Context, msg: String, ms: Long = 2500) {
+        // First try the standalone VoiceHud overlay
+        if (VoiceHud.show(ctx, msg, ms)) return
+        // Otherwise flash on island or show toast
         val shown = island?.invoke(msg) ?: false
         if (!shown) Toast.makeText(ctx.applicationContext, msg, Toast.LENGTH_SHORT).show()
     }
 
-    /** Show the command HUD and, if the island is not visible, also a toast. */
+    /** Show the command HUD on both the Island and VoiceHud pill. */
     fun showCommand(ctx: Context, label: String) {
         commandHud?.invoke(label)
-        if (commandHud == null) {
-            Toast.makeText(ctx.applicationContext, label, Toast.LENGTH_SHORT).show()
-        }
+        VoiceHud.show(ctx, label, 2200)
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VoiceCommands — command parser and executor
+// VoiceCommands — natural language command parser and executor
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Full voice media-control command set.
- *
- * Wake word: "lizmo <command>"
- *
- * ── Playback ──
- *  "pause" / "stop" / "hold on"
- *  "play" / "resume" / "continue"
- *  "next" / "skip"
- *  "previous" / "back" / "go back"
- *  "restart" / "play from the beginning" / "replay"
- *  "stop music" / "stop playing"
- *
- * ── Seeking ──
- *  "skip forward 30 seconds"
- *  "skip forward 2 minutes"
- *  "rewind 10 seconds"
- *  "go back 30 seconds"
- *  "fast forward 1 minute"
- *  "jump to 2 minutes 30 seconds"
- *
- * ── Volume ──
- *  "volume up" / "louder" / "turn it up"
- *  "volume down" / "quieter" / "softer"
- *  "max volume"
- *  "set volume to 60"  /  "volume 70 percent"
- *  "mute" / "unmute"
- *  "what's the volume" / "volume level"
- *
- * ── Shuffle & Repeat ──
- *  "shuffle" / "shuffle on" / "turn on shuffle"
- *  "shuffle off" / "turn off shuffle"
- *  "repeat" / "repeat this song" / "repeat one" / "loop this"
- *  "repeat all" / "loop all"
- *  "repeat off" / "no repeat"
- *
- * ── Like / Dislike ──
- *  "like this" / "like this song" / "thumbs up"
- *  "dislike" / "thumbs down"
- *
- * ── Info ──
- *  "what's playing" / "what song is this" / "what is playing"
- *
- * ── Anything else → music search & play ──
- *  "play Kesariya"  /  "play Blinding Lights by The Weeknd"
- */
 object VoiceCommands {
 
-    // ── Playback ──────────────────────────────────────────────────────────────
+    // ── Pre-processing & Normalization ────────────────────────────────────────
+
+    private val LEADING_FLUFF = Regex(
+        """^(hey\s+lizmo|ok\s+lizmo|lizmo|can\s+you\s+please|could\s+you\s+please|can\s+you|could\s+you|would\s+you|please|kindly|just|a\s+little\s+bit|a\s+bit|a\s+little)\s+""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val TRAILING_FLUFF = Regex(
+        """\s+(a\s+little\s+bit|a\s+bit|a\s+little|please|now|thanks|thank\s+you|for\s+me)\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val WORD_TO_NUM = listOf(
+        Regex("""\bzero\b""", RegexOption.IGNORE_CASE) to "0",
+        Regex("""\bten\b""", RegexOption.IGNORE_CASE) to "10",
+        Regex("""\btwenty\b""", RegexOption.IGNORE_CASE) to "20",
+        Regex("""\bthirty\b""", RegexOption.IGNORE_CASE) to "30",
+        Regex("""\bforty\b""", RegexOption.IGNORE_CASE) to "40",
+        Regex("""\bfifty\b""", RegexOption.IGNORE_CASE) to "50",
+        Regex("""\bsixty\b""", RegexOption.IGNORE_CASE) to "60",
+        Regex("""\bseventy\b""", RegexOption.IGNORE_CASE) to "70",
+        Regex("""\beighty\b""", RegexOption.IGNORE_CASE) to "80",
+        Regex("""\bninety\b""", RegexOption.IGNORE_CASE) to "90",
+        Regex("""\bhundred\b""", RegexOption.IGNORE_CASE) to "100",
+        Regex("""\bone\s+hundred\b""", RegexOption.IGNORE_CASE) to "100",
+        Regex("""\bhalf\b""", RegexOption.IGNORE_CASE) to "50"
+    )
+
+    /** Cleans punctuation, removes leading/trailing conversational padding, and converts number words. */
+    fun normalize(raw: String): String {
+        var s = raw.lowercase()
+            .replace("'", "") // e.g. "what's" -> "whats", "don't" -> "dont"
+            .replace(Regex("""[^\p{L}\p{N}%\s]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        // Strip conversational prefixes and suffixes
+        s = s.replace(LEADING_FLUFF, "").replace(TRAILING_FLUFF, "").trim()
+
+        // Convert number words to digits for volume parsing
+        for ((re, replacement) in WORD_TO_NUM) {
+            s = s.replace(re, replacement)
+        }
+        return s.replace(Regex("""\s+"""), " ").trim()
+    }
+
+    // ── Regex Patterns ────────────────────────────────────────────────────────
+
+    // Playback
     private val pauseRe = Regex(
-        """(pause|pause (the )?(music|song|track|playback)|stop (the )?(music|song|track|playback)|hold on)""")
+        """^(pause|pause\s+(the\s+)?(music|song|track|playback)|stop|stop\s+(the\s+)?(music|song|track|playback)|hold\s+on|hold\s+playback|freeze)$"""
+    )
     private val playRe = Regex(
-        """(play|resume|continue|(play|resume) (the )?(music|song|track))""")
+        """^(play|resume|continue|unpause|(play|resume)\s+(the\s+)?(music|song|track|playback)|keep\s+playing|start\s+playing)$"""
+    )
     private val nextRe = Regex(
-        """(next|skip|(next|skip) (this )?(song|track)|(play )?next (song|track))""")
+        """^(next|skip|next\s+(song|track)|skip\s+(this\s+)?(song|track|one)|play\s+next(\s+(song|track))?|skip\s+ahead|skip\s+to\s+next)$"""
+    )
     private val prevRe = Regex(
-        """(previous|back|go back|(previous|last) (song|track)|(play )?previous (song|track))""")
+        """^(previous|prev|back|go\s+back|last\s+(song|track|one)|previous\s+(song|track)|play\s+previous(\s+(song|track))?|go\s+back\s+to\s+previous(\s+(song|track))?)$"""
+    )
     private val restartRe = Regex(
-        """(restart( (the )?(song|track))?|play from (the )?(beginning|start)|replay( (this )?(song|track))?)""")
+        """^(restart(\s+(the|this)\s+(song|track))?|start\s+over|play\s+from\s+(the\s+)?(beginning|start)|replay(\s+(this|the)\s+(song|track))?)$"""
+    )
     private val stopRe = Regex(
-        """(stop (music|playing|playback)|stop it|quit playing)""")
+        """^(stop\s+music|stop\s+playing|stop\s+playback|stop\s+it|quit\s+playing|shut\s+up)$"""
+    )
 
-    // ── Seeking ───────────────────────────────────────────────────────────────
-    // "skip forward 30 seconds", "fast forward 2 minutes", "rewind 10 seconds",
-    // "go back 1 minute 30 seconds", "jump to 2 minutes"
+    // Seeking
     private val fwdRe = Regex(
-        """(skip|fast)? ?forward(?: by)?(?: (\d+) minutes?)?(?: and)?(?: (\d+) seconds?)?""")
+        """^((skip|fast)\s+)?forward(\s+by)?(\s+(\d+)\s+minutes?)?(\s+and)?(\s+(\d+)\s+seconds?)?$"""
+    )
     private val rwdRe = Regex(
-        """(rewind|go back|skip back)(?: by)?(?: (\d+) minutes?)?(?: and)?(?: (\d+) seconds?)?""")
+        """^(rewind|go\s+back|skip\s+back)(\s+by)?(\s+(\d+)\s+minutes?)?(\s+and)?(\s+(\d+)\s+seconds?)?$"""
+    )
     private val jumpRe = Regex(
-        """jump to(?: (\d+) minutes?)?(?: and)?(?: (\d+) seconds?)?""")
+        """^(jump\s+to|seek\s+to)(\s+(\d+)\s+minutes?)?(\s+and)?(\s+(\d+)\s+seconds?)?$"""
+    )
 
-    // ── Volume ────────────────────────────────────────────────────────────────
+    // Volume
     private val upRe = Regex(
-        """(volume up|louder|turn (it )?up|(increase|raise|turn up) (the )?volume|more volume)""")
+        """^(volume\s+up|louder|make\s+it\s+louder|turn\s+(it\s+)?up|turn\s+(the\s+)?volume\s+up|(increase|raise|boost|turn\s+up)\s+(the\s+)?volume|more\s+volume|volume\s+higher|higher\s+volume)$"""
+    )
     private val downRe = Regex(
-        """(volume down|quieter|softer|lower|turn (it )?down|(decrease|lower|turn down|reduce) (the )?volume|less volume)""")
+        """^(volume\s+down|quieter|make\s+it\s+quieter|softer|lower|turn\s+(it\s+)?down|turn\s+(the\s+)?volume\s+down|(decrease|lower|reduce|turn\s+down)\s+(the\s+)?volume|less\s+volume|volume\s+lower|lower\s+the\s+volume)$"""
+    )
     private val maxRe = Regex(
-        """((max|full|maximum) volume|volume (max|full|maximum)|turn (it )?all the way up)""")
+        """^((max|full|maximum)\s+volume|volume\s+(max|full|maximum|100)|turn\s+(it\s+)?all\s+the\s+way\s+up)$"""
+    )
     private val muteRe = Regex(
-        """(mute|mute (the )?(music|sound|volume)|silence)""")
+        """^(mute|mute\s+(the\s+)?(music|sound|volume|audio)|silence)$"""
+    )
     private val unmuteRe = Regex(
-        """(unmute|unmute (the )?(music|sound|volume)|un mute)""")
-    private val setRe = Regex(
-        """(set )?(the )?volume( to| at)? (\d{1,3})( ?%| percent)?""")
+        """^(unmute|unmute\s+(the\s+)?(music|sound|volume|audio)|un\s+mute|turn\s+(the\s+)?sound\s+back\s+on)$"""
+    )
+    private val setVolRe = Regex(
+        """^(set|turn)?\s*(the\s+)?volume(\s+(to|at))?\s+(\d{1,3})(\s*(%|percent))?$"""
+    )
     private val volQueryRe = Regex(
-        """(what('?s| is) the volume|volume level|how loud(( is)? (it|the music))?)""")
+        """^(what(s|\s+is)\s+the\s+volume|volume\s+level|how\s+loud(\s+(is\s+)?(it|the\s+music))?)$"""
+    )
 
-    // ── Shuffle ───────────────────────────────────────────────────────────────
+    // Shuffle
     private val shuffleOnRe = Regex(
-        """(shuffle( on)?|turn on shuffle|(enable|start) shuffle|play (on )?shuffle|mix it up)""")
+        """^(shuffle(\s+on)?|turn\s+on\s+shuffle|(enable|start|activate)\s+shuffle|play\s+(on\s+)?shuffle|mix\s+it\s+up)$"""
+    )
     private val shuffleOffRe = Regex(
-        """(shuffle off|turn off shuffle|(disable|stop) shuffle|no shuffle)""")
+        """^(shuffle\s+off|turn\s+off\s+shuffle|(disable|stop)\s+shuffle|no\s+shuffle)$"""
+    )
 
-    // ── Repeat ────────────────────────────────────────────────────────────────
+    // Repeat
     private val repeatOneRe = Regex(
-        """(repeat( this)? (song|track|one)?|loop( this)?( song| track)?|repeat one|play (on )?repeat)""")
+        """^(repeat(\s+this)?(\s+(song|track|one))?|loop(\s+this)?(\s+(song|track))?|repeat\s+one|play\s+(on\s+)?repeat)$"""
+    )
     private val repeatAllRe = Regex(
-        """(repeat all|loop all|repeat playlist|loop playlist)""")
+        """^(repeat\s+all|loop\s+all|repeat\s+playlist|loop\s+playlist)$"""
+    )
     private val repeatOffRe = Regex(
-        """(repeat off|no repeat|(stop|disable) repeat|(stop|disable) loop(ing)?)""")
+        """^(repeat\s+off|no\s+repeat|(stop|disable)\s+repeat|(stop|disable)\s+loop(ing)?)$"""
+    )
 
-    // ── Like / Dislike ────────────────────────────────────────────────────────
+    // Like / Dislike
     private val likeRe = Regex(
-        """(like( this( song| track)?)?|thumbs up|(add to )?favourites?|save (this )?song|love (this )?song)""")
+        """^(like(\s+this(\s+(song|track))?)?|thumbs\s+up|(add\s+to\s+)?favourites?|save\s+(this\s+)?song|love\s+(this\s+)?song)$"""
+    )
     private val dislikeRe = Regex(
-        """(dislike( this( song| track)?)?|thumbs down|don'?t like (this )?song)""")
+        """^(dislike(\s+this(\s+(song|track))?)?|thumbs\s+down|dont\s+like\s+(this\s+)?song)$"""
+    )
 
-    // ── Info ──────────────────────────────────────────────────────────────────
+    // Info
     private val nowPlayingRe = Regex(
-        """(what'?s? (is )?playing|what (song|track) is (this|playing)|what am i listening to|name (this|the) song)""")
+        """^(what(s|\s+is)\s+playing|what\s+(song|track)\s+is\s+(this|playing)|what\s+am\s+i\s+listening\s+to|name\s+(this|the)\s+song|which\s+song\s+is\s+this)$"""
+    )
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun norm(s: String): String =
-        s.lowercase().replace(Regex("""[^\p{L}\p{N}%'\s]"""), " ").replace(Regex("""\s+"""), " ").trim()
-
-    /** Returns true if [raw] is a known control command (not a search query). */
+    /** Returns true if [raw] is definitely a media control command and not a song query. */
     fun isControl(raw: String): Boolean {
-        val t = norm(raw)
-        return listOf(
-            pauseRe, playRe, nextRe, prevRe, restartRe, stopRe,
-            upRe, downRe, maxRe, muteRe, unmuteRe, setRe, volQueryRe,
-            shuffleOnRe, shuffleOffRe,
-            repeatOneRe, repeatAllRe, repeatOffRe,
-            likeRe, dislikeRe,
-            nowPlayingRe
-        ).any { it.matches(t) }
-            || fwdRe.containsMatchIn(t) || rwdRe.containsMatchIn(t) || jumpRe.containsMatchIn(t)
+        val t = normalize(raw)
+        if (t.isBlank()) return false
+        return pauseRe.matches(t) || playRe.matches(t) || nextRe.matches(t) || prevRe.matches(t) ||
+               restartRe.matches(t) || stopRe.matches(t) ||
+               upRe.matches(t) || downRe.matches(t) || maxRe.matches(t) ||
+               muteRe.matches(t) || unmuteRe.matches(t) || setVolRe.matches(t) || volQueryRe.matches(t) ||
+               shuffleOnRe.matches(t) || shuffleOffRe.matches(t) ||
+               repeatOneRe.matches(t) || repeatAllRe.matches(t) || repeatOffRe.matches(t) ||
+               likeRe.matches(t) || dislikeRe.matches(t) || nowPlayingRe.matches(t) ||
+               fwdRe.matches(t) || rwdRe.matches(t) || jumpRe.matches(t)
     }
 
-    /** Runs the command, returns short feedback text for VoiceBus.say(). */
+    /** Runs the command and returns a short user-facing feedback string. */
     fun run(ctx: Context, raw: String): String {
-        val t = norm(raw)
+        val t = normalize(raw)
         return when {
             // ── Playback ──────────────────────────────────────────────────────
-            pauseRe.matches(t)   -> { Playback.pause(ctx);  hud(ctx, "⏸ Paused");  "Paused" }
-            playRe.matches(t)    -> { Playback.resume(ctx); hud(ctx, "▶ Playing"); "Playing" }
-            nextRe.matches(t)    -> { Playback.next(ctx);   hud(ctx, "⏭ Next");   "Next" }
-            prevRe.matches(t)    -> { Playback.prev(ctx);   hud(ctx, "⏮ Previous"); "Previous" }
-            restartRe.matches(t) -> { Playback.restart(ctx); hud(ctx, "↩ Restart"); "Restarting" }
-            stopRe.matches(t)    -> { Playback.stop(ctx);   hud(ctx, "⏹ Stopped"); "Stopped" }
+            pauseRe.matches(t)   -> { Playback.pause(ctx);   hud(ctx, "⏸ Paused");    "Paused" }
+            playRe.matches(t)    -> { Playback.resume(ctx);  hud(ctx, "▶ Playing");   "Playing" }
+            nextRe.matches(t)    -> { Playback.next(ctx);    hud(ctx, "⏭ Next");      "Next" }
+            prevRe.matches(t)    -> { Playback.prev(ctx);    hud(ctx, "⏮ Previous");  "Previous" }
+            restartRe.matches(t) -> { Playback.restart(ctx); hud(ctx, "↩ Restart");   "Restarting" }
+            stopRe.matches(t)    -> { Playback.stop(ctx);    hud(ctx, "⏹ Stopped");   "Stopped" }
 
             // ── Seeking ───────────────────────────────────────────────────────
-            fwdRe.containsMatchIn(t) -> {
-                val ms = parseTimeMs(t, fwdRe) ?: 30_000L
+            fwdRe.matches(t) -> {
+                val ms = parseTimeMs(t) ?: 30_000L
                 Playback.seek(ctx, ms)
                 val label = "⏩ +${formatTime(ms)}"
                 hud(ctx, label); label
             }
-            rwdRe.containsMatchIn(t) -> {
-                val ms = parseTimeMs(t, rwdRe) ?: 10_000L
+            rwdRe.matches(t) -> {
+                val ms = parseTimeMs(t) ?: 15_000L
                 Playback.seek(ctx, -ms)
                 val label = "⏪ −${formatTime(ms)}"
                 hud(ctx, label); label
             }
-            jumpRe.containsMatchIn(t) -> {
-                val ms = parseTimeMs(t, jumpRe) ?: 0L
-                // Jump to absolute position
-                val c = Playback.controller(ctx)
-                c?.transportControls?.seekTo(ms)
+            jumpRe.matches(t) -> {
+                val ms = parseTimeMs(t) ?: 0L
+                Playback.controller(ctx)?.transportControls?.seekTo(ms)
                 val label = "⏩ → ${formatTime(ms)}"
                 hud(ctx, label); label
             }
 
             // ── Volume ────────────────────────────────────────────────────────
-            upRe.matches(t)    -> { step(ctx, true);    hud(ctx, "🔊 Louder");   "Volume up" }
-            downRe.matches(t)  -> { step(ctx, false);   hud(ctx, "🔉 Quieter"); "Volume down" }
-            maxRe.matches(t)   -> { setPct(ctx, 100);   hud(ctx, "🔊 Max volume"); "Volume max" }
-            muteRe.matches(t)  -> { mute(ctx, true);    hud(ctx, "🔇 Muted");   "Muted" }
-            unmuteRe.matches(t)-> { mute(ctx, false);   hud(ctx, "🔊 Unmuted"); "Unmuted" }
-            setRe.matches(t)   -> {
-                val n = setRe.matchEntire(t)!!.groupValues[4].toInt().coerceIn(0, 100)
-                setPct(ctx, n)
+            upRe.matches(t)    -> { stepVolume(ctx, true);  hud(ctx, "🔊 Louder");     "Volume up" }
+            downRe.matches(t)  -> { stepVolume(ctx, false); hud(ctx, "🔉 Quieter");    "Volume down" }
+            maxRe.matches(t)   -> { setVolumePct(ctx, 100); hud(ctx, "🔊 Max Volume"); "Volume max" }
+            muteRe.matches(t)  -> { mute(ctx, true);        hud(ctx, "🔇 Muted");      "Muted" }
+            unmuteRe.matches(t)-> { mute(ctx, false);       hud(ctx, "🔊 Unmuted");    "Unmuted" }
+            setVolRe.matches(t)-> {
+                val match = setVolRe.matchEntire(t)!!
+                val n = match.groupValues[5].toInt().coerceIn(0, 100)
+                setVolumePct(ctx, n)
                 hud(ctx, "🔊 Volume $n%")
                 "Volume $n%"
             }
@@ -260,12 +276,12 @@ object VoiceCommands {
             // ── Like / Dislike ────────────────────────────────────────────────
             likeRe.matches(t) -> {
                 val ok = Playback.like(ctx)
-                val msg = if (ok) "❤ Liked!" else "❤ Liked (app may not support ratings)"
+                val msg = if (ok) "❤ Liked!" else "❤ Liked"
                 hud(ctx, msg); msg
             }
             dislikeRe.matches(t) -> {
                 val ok = Playback.dislike(ctx)
-                val msg = if (ok) "👎 Disliked" else "👎 Disliked (app may not support ratings)"
+                val msg = if (ok) "👎 Disliked" else "👎 Disliked"
                 hud(ctx, msg); msg
             }
 
@@ -275,24 +291,20 @@ object VoiceCommands {
                 hud(ctx, "🎵 $info"); info
             }
 
-            // ── Search & play ─────────────────────────────────────────────────
+            // ── Song Search & Play ────────────────────────────────────────────
             else -> search(ctx, raw)
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Private helpers
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Helper Functions ──────────────────────────────────────────────────────
 
-    /** Flash the command label on the island HUD. */
     private fun hud(ctx: Context, label: String) = VoiceBus.showCommand(ctx, label)
 
     private fun am(ctx: Context) = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    private fun step(ctx: Context, up: Boolean) {
+    private fun stepVolume(ctx: Context, up: Boolean) {
         try {
             val d = if (up) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
-            am(ctx).adjustStreamVolume(AudioManager.STREAM_MUSIC, d, 0)
             am(ctx).adjustStreamVolume(AudioManager.STREAM_MUSIC, d, AudioManager.FLAG_SHOW_UI)
         } catch (e: Exception) {}
     }
@@ -304,7 +316,7 @@ object VoiceCommands {
         } catch (e: Exception) {}
     }
 
-    private fun setPct(ctx: Context, pct: Int) {
+    private fun setVolumePct(ctx: Context, pct: Int) {
         try {
             val a = am(ctx)
             val max = a.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -312,14 +324,7 @@ object VoiceCommands {
         } catch (e: Exception) {}
     }
 
-    /**
-     * Parse time from a regex match on [text].
-     * Groups tried: the regex may contain optional minute/second groups by position.
-     * Falls back to looking for bare number patterns.
-     */
-    private fun parseTimeMs(text: String, re: Regex): Long? {
-        if (!re.containsMatchIn(text)) return null
-        // Try to extract minutes and seconds from the remaining text after the keyword
+    private fun parseTimeMs(text: String): Long? {
         val numRe = Regex("""(\d+)\s*(minute|min|m\b)|(\d+)\s*(second|sec|s\b)""")
         var minutes = 0L
         var seconds = 0L
@@ -329,7 +334,6 @@ object VoiceCommands {
             if (unit.startsWith("m")) minutes = v else seconds = v
         }
         if (minutes == 0L && seconds == 0L) {
-            // Plain number with no unit = seconds
             val plain = Regex("""(?<!\d)(\d+)(?!\d)""").find(text)?.groupValues?.get(1)?.toLongOrNull()
             if (plain != null) seconds = plain
         }
@@ -337,14 +341,12 @@ object VoiceCommands {
         return if (total > 0) total else null
     }
 
-    /** Format ms → "1m 30s" or "30s" */
     private fun formatTime(ms: Long): String {
         val s = ms / 1000
         val m = s / 60
         return if (m > 0) "${m}m ${s % 60}s" else "${s}s"
     }
 
-    /** Anything else = a song request: find it, play in the active music platform. */
     private fun search(ctx: Context, raw: String): String {
         val q = Catalog.cleanVoice(raw)
         if (q.length < 2) return "Didn't catch that"
@@ -358,17 +360,18 @@ object VoiceCommands {
                 else -> "No music app could play " + s.title
             }
             VoiceBus.say(ctx, msg)
-            if (s != null && Playback.play(ctx, s)) hud(ctx, "🎵 Playing: ${s.title}")
+            if (s != null && Playback.play(ctx, s)) {
+                hud(ctx, "🎵 Playing: ${s.title}")
+            }
         }
         return "Searching \"$q\"…"
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WakeWord — fuzzy wake-word matcher
+// WakeWord — fuzzy matcher for fallback speech recognizer
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Fuzzy wake-word matching on speech-to-text output (STT often mishears made-up names). */
 object WakeWord {
     private fun norm(s: String): String =
         s.lowercase().replace(Regex("""[^\p{L}\p{N}\s]"""), " ").replace(Regex("""\s+"""), " ").trim()
@@ -389,11 +392,9 @@ object WakeWord {
 
     private fun close(a: String, b: String): Boolean = a == b || (b.length >= 5 && lev(a, b) <= 1)
 
-    /** Text after the wake word; "" if only the wake word was heard; null if it wasn't said.
-     *  [wakeCsv] can hold several names/spellings separated by commas. */
     fun extract(said: String, wakeCsv: String): String? {
         for (alias in wakeCsv.split(",")) {
-            val r = extractOne(said, alias)
+            val r = extractOne(said, alias.trim())
             if (r != null) return r
         }
         return null
@@ -405,9 +406,10 @@ object WakeWord {
         if (w.isEmpty() || t.size < w.size) return null
         for (i in 0..minOf(2, t.size - w.size)) {
             var ok = true
-            for (k in w.indices) if (!close(t[i + k], w[k])) { ok = false; break }
+            for (k in w.indices) {
+                if (!close(t[i + k], w[k])) { ok = false; break }
+            }
             if (ok) return t.drop(i + w.size).joinToString(" ")
-            // "lis mo" → "lismo"
             if (w.size == 1 && i + 1 < t.size && close(t[i] + t[i + 1], w[0])) {
                 return t.drop(i + 2).joinToString(" ")
             }
@@ -417,7 +419,7 @@ object WakeWord {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Error name helper
+// Speech error descriptor
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun speechErrorName(code: Int): String = when (code) {

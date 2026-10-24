@@ -55,3 +55,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
+dependencies {
+    implementation("ai.picovoice:porcupine-android:4.0.+")
+    implementation("ai.picovoice:eagle-android:3.0.+")
+    implementation("ai.picovoice:android-voice-processor:1.0.2")
+    testImplementation("junit:junit:4.13.2")
+}
