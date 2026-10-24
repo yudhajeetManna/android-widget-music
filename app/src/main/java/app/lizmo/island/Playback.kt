@@ -26,13 +26,13 @@ object Playback {
 
     /** Known music platform package names and their search intent schemes. */
     private val PLATFORM_SEARCH = mapOf(
-        "com.spotify.music"            to { q: String -> platformIntent("spotify", "spotify:search:$q") },
+        "com.spotify.music"            to { q: String -> platformIntent("spotify:search:$q") },
         "com.google.android.apps.youtube.music" to { q: String -> ytMusicSearch(q) },
         "com.google.android.youtube"   to { q: String -> ytSearch(q) },
-        "com.jiosaavn.jio"            to { q: String -> platformIntent("jiosaavn", "jiosaavn://songs?query=$q") },
+        "com.jiosaavn.jio"            to { q: String -> platformIntent("jiosaavn://songs?query=$q") },
         "com.gaana"                    to { q: String -> webSearch("https://gaana.com/search/$q") },
         "com.wynk.music"              to { q: String -> webSearch("https://wynk.in/music/search?q=$q") },
-        "com.apple.android.music"      to { q: String -> platformIntent("music", "music://search?q=$q") },
+        "com.apple.android.music"      to { q: String -> platformIntent("music://search?q=$q") },
         "soundcloud.android.playback" to { q: String -> webSearch("https://soundcloud.com/search?q=$q") },
         "com.maxmpz.audioplayer"      to null,   // Poweramp — no deep-link, use media session
         "com.sonyericsson.music"      to null,
@@ -42,7 +42,7 @@ object Playback {
 
     // ---------- internal helpers ----------
 
-    private fun platformIntent(scheme: String, uri: String): Intent =
+    private fun platformIntent(uri: String): Intent =
         Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -125,34 +125,69 @@ object Playback {
         c.transportControls.seekTo((current + deltaMs).coerceAtLeast(0L))
     }
 
-    /** Toggle shuffle. Uses the PlaybackState custom action if available, else sends a keycode. */
-    fun shuffle(ctx: Context) {
-        val c = controller(ctx)
-        if (c != null) {
-            // Standard Android shuffle action
-            try { c.transportControls.setShuffleMode(
-                if (c.shuffleMode == android.media.session.PlaybackState.SHUFFLE_MODE_NONE)
-                    android.media.session.PlaybackState.SHUFFLE_MODE_ALL
-                else android.media.session.PlaybackState.SHUFFLE_MODE_NONE
-            ) } catch (e: Exception) {
-                key(ctx, KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD) // best-effort fallback
+    const val SHUFFLE_MODE_NONE = 0
+    const val SHUFFLE_MODE_ALL = 1
+
+    const val REPEAT_MODE_NONE = 0
+    const val REPEAT_MODE_ONE = 1
+    const val REPEAT_MODE_ALL = 2
+
+    private const val ACTION_SET_SHUFFLE_MODE = "android.support.v4.media.session.action.SET_SHUFFLE_MODE"
+    private const val ARG_SHUFFLE_MODE = "android.support.v4.media.session.ARGUMENT_SHUFFLE_MODE"
+    private const val ACTION_SET_REPEAT_MODE = "android.support.v4.media.session.action.SET_REPEAT_MODE"
+    private const val ARG_REPEAT_MODE = "android.support.v4.media.session.ARGUMENT_REPEAT_MODE"
+
+    @Volatile private var isShuffled = false
+    @Volatile private var currentRepeatMode = REPEAT_MODE_NONE
+
+    fun setShuffle(ctx: Context, enable: Boolean) {
+        val c = controller(ctx) ?: return
+        isShuffled = enable
+        val mode = if (enable) SHUFFLE_MODE_ALL else SHUFFLE_MODE_NONE
+        try {
+            val bundle = Bundle().apply { putInt(ARG_SHUFFLE_MODE, mode) }
+            c.transportControls.sendCustomAction(ACTION_SET_SHUFFLE_MODE, bundle)
+        } catch (e: Exception) {}
+
+        try {
+            c.playbackState?.customActions?.find {
+                it.action.contains("shuffle", ignoreCase = true)
+            }?.let { act ->
+                c.transportControls.sendCustomAction(act.action, act.extras ?: Bundle())
             }
-        }
+        } catch (e: Exception) {}
+    }
+
+    /** Toggle shuffle. */
+    fun shuffle(ctx: Context) {
+        setShuffle(ctx, !isShuffled)
+    }
+
+    fun setRepeat(ctx: Context, mode: Int) {
+        val c = controller(ctx) ?: return
+        currentRepeatMode = mode
+        try {
+            val bundle = Bundle().apply { putInt(ARG_REPEAT_MODE, mode) }
+            c.transportControls.sendCustomAction(ACTION_SET_REPEAT_MODE, bundle)
+        } catch (e: Exception) {}
+
+        try {
+            c.playbackState?.customActions?.find {
+                it.action.contains("repeat", ignoreCase = true)
+            }?.let { act ->
+                c.transportControls.sendCustomAction(act.action, act.extras ?: Bundle())
+            }
+        } catch (e: Exception) {}
     }
 
     /** Cycle repeat mode: NONE → ONE → ALL → NONE. */
     fun repeat(ctx: Context) {
-        val c = controller(ctx)
-        if (c != null) {
-            try {
-                val next = when (c.repeatMode) {
-                    android.media.session.PlaybackState.REPEAT_MODE_NONE -> android.media.session.PlaybackState.REPEAT_MODE_ONE
-                    android.media.session.PlaybackState.REPEAT_MODE_ONE  -> android.media.session.PlaybackState.REPEAT_MODE_ALL
-                    else -> android.media.session.PlaybackState.REPEAT_MODE_NONE
-                }
-                c.transportControls.setRepeatMode(next)
-            } catch (e: Exception) {}
+        val next = when (currentRepeatMode) {
+            REPEAT_MODE_NONE -> REPEAT_MODE_ONE
+            REPEAT_MODE_ONE  -> REPEAT_MODE_ALL
+            else             -> REPEAT_MODE_NONE
         }
+        setRepeat(ctx, next)
     }
 
     /** Send a "like" (thumbs up) rating to the active session. Returns true if supported. */

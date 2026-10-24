@@ -235,32 +235,25 @@ object VoiceCommands {
 
             // ── Shuffle ───────────────────────────────────────────────────────
             shuffleOffRe.matches(t) -> {
-                // setShuffleMode NONE explicitly
-                try {
-                    Playback.controller(ctx)?.transportControls?.setShuffleMode(
-                        android.media.session.PlaybackState.SHUFFLE_MODE_NONE)
-                } catch (e: Exception) {}
+                Playback.setShuffle(ctx, false)
                 hud(ctx, "🔀 Shuffle off"); "Shuffle off"
             }
             shuffleOnRe.matches(t)  -> {
-                Playback.shuffle(ctx)
+                Playback.setShuffle(ctx, true)
                 hud(ctx, "🔀 Shuffle on"); "Shuffle on"
             }
 
             // ── Repeat ────────────────────────────────────────────────────────
             repeatAllRe.matches(t) -> {
-                try { Playback.controller(ctx)?.transportControls?.setRepeatMode(
-                    android.media.session.PlaybackState.REPEAT_MODE_ALL) } catch (e: Exception) {}
+                Playback.setRepeat(ctx, Playback.REPEAT_MODE_ALL)
                 hud(ctx, "🔁 Repeat all"); "Repeat all"
             }
             repeatOffRe.matches(t) -> {
-                try { Playback.controller(ctx)?.transportControls?.setRepeatMode(
-                    android.media.session.PlaybackState.REPEAT_MODE_NONE) } catch (e: Exception) {}
+                Playback.setRepeat(ctx, Playback.REPEAT_MODE_NONE)
                 hud(ctx, "➡ Repeat off"); "Repeat off"
             }
             repeatOneRe.matches(t) -> {
-                try { Playback.controller(ctx)?.transportControls?.setRepeatMode(
-                    android.media.session.PlaybackState.REPEAT_MODE_ONE) } catch (e: Exception) {}
+                Playback.setRepeat(ctx, Playback.REPEAT_MODE_ONE)
                 hud(ctx, "🔂 Repeat one"); "Repeat this song"
             }
 
@@ -325,7 +318,7 @@ object VoiceCommands {
      * Falls back to looking for bare number patterns.
      */
     private fun parseTimeMs(text: String, re: Regex): Long? {
-        val m = re.find(text) ?: return null
+        if (!re.containsMatchIn(text)) return null
         // Try to extract minutes and seconds from the remaining text after the keyword
         val numRe = Regex("""(\d+)\s*(minute|min|m\b)|(\d+)\s*(second|sec|s\b)""")
         var minutes = 0L
